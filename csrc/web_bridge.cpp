@@ -1,5 +1,6 @@
 #include "web_bridge.h"
 
+#include <QString>
 #include <QApplication>
 #include <QColor>
 #include <QMainWindow>

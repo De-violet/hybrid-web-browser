@@ -12,6 +12,7 @@ fn main() {
 
     if target_os == "windows" {
         build.flag("/Zc:__cplusplus");
+        build.flag("/permissive-");
         let qt_dir = std::env::var("QT_DIR")
             .or_else(|_| std::env::var("QT_ROOT_DIR"))
             .or_else(|_| std::env::var("Qt6_DIR"))
