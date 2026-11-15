@@ -1,0 +1,111 @@
+name: Build and Release Falkon-Rust
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            artifact_name: linux
+          - os: windows-latest
+            artifact_name: windows
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      # ---------------- Linux Setup ----------------
+      - name: Install Linux Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            qt6-base-dev \
+            qt6-webengine-dev \
+            libqt6svg6-dev
+
+      - name: Build Linux Binary
+        if: runner.os == 'Linux'
+        run: cargo build --release
+
+      - name: Package Linux Assets
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist/bundle
+          cp target/release/falkon-rust dist/falkon-rust-linux-x86_64
+          cp target/release/falkon-rust dist/bundle/
+          cp README.md dist/bundle/
+          if [ -f falkon-rust.desktop ]; then cp falkon-rust.desktop dist/bundle/; fi
+          if [ -f falkon-rust.svg ]; then cp falkon-rust.svg dist/bundle/; fi
+          tar -czf dist/falkon-rust-linux-x86_64.tar.gz -C dist/bundle .
+
+      # ---------------- Windows Setup ----------------
+      - name: Install Qt (Windows)
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.2'
+          arch: 'win64_msvc2022_64'
+          modules: 'qtwebengine'
+
+      - name: Build Windows Binary
+        if: runner.os == 'Windows'
+        run: cargo build --release
+
+      - name: Package Windows Assets
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\falkon-rust-windows-x86_64
+          Copy-Item target\release\falkon-rust.exe -Destination dist\falkon-rust-windows-x86_64\
+          Copy-Item target\release\falkon-rust.exe -Destination dist\falkon-rust.exe
+          Copy-Item README.md -Destination dist\falkon-rust-windows-x86_64\
+          
+          # Deploy Qt runtime dependencies
+          windeployqt --release --compiler-runtime --webengine dist\falkon-rust-windows-x86_64\falkon-rust.exe
+          
+          # Create standalone zip package
+          Compress-Archive -Path dist\falkon-rust-windows-x86_64 -DestinationPath dist\falkon-rust-windows-x86_64.zip
+
+      # ---------------- Upload Artifacts ----------------
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: falkon-rust-${{ matrix.artifact_name }}
+          path: dist/*
+          if-no-files-found: error
+
+      # ---------------- Release Assets ----------------
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/falkon-rust-linux-x86_64
+            dist/falkon-rust-linux-x86_64.tar.gz
+            dist/falkon-rust.exe
+            dist/falkon-rust-windows-x86_64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
