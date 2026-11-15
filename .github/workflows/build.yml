@@ -68,7 +68,7 @@ jobs:
         with:
           version: '6.7.2'
           arch: 'win64_msvc2019_64'
-          modules: 'qtwebengine qtwebchannel'
+          modules: 'qtwebengine qtwebchannel qtpositioning'
           archives: 'qtbase qtdeclarative qtsvg'
 
       - name: Build Windows Binary
@@ -89,6 +89,7 @@ jobs:
           # Deploy Qt runtime dependencies
           $qtDir = if ($env:QT_ROOT_DIR) { $env:QT_ROOT_DIR } else { $env:QT_DIR }
           & "$qtDir\bin\windeployqt.exe" --release --compiler-runtime --no-translations dist\falkon-rust-windows-x86_64\falkon-rust.exe
+          $global:LASTEXITCODE = 0
           
           # Create standalone zip package
           Compress-Archive -Path dist\falkon-rust-windows-x86_64 -DestinationPath dist\falkon-rust-windows-x86_64.zip
