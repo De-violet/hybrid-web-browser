@@ -68,7 +68,7 @@ jobs:
         with:
           version: '6.7.2'
           arch: 'win64_msvc2019_64'
-          modules: 'qtwebengine'
+          modules: 'qtwebengine qtwebchannel'
           archives: 'qtbase qtdeclarative qtsvg'
 
       - name: Build Windows Binary
