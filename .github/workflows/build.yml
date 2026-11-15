@@ -73,6 +73,8 @@ jobs:
 
       - name: Build Windows Binary
         if: runner.os == 'Windows'
+        env:
+          QT_DIR: ${{ env.QT_ROOT_DIR }}
         run: cargo build --release
 
       - name: Package Windows Assets
@@ -85,7 +87,8 @@ jobs:
           Copy-Item README.md -Destination dist\falkon-rust-windows-x86_64\
           
           # Deploy Qt runtime dependencies
-          & "$env:QT_DIR\bin\windeployqt.exe" --release --compiler-runtime --webengine dist\falkon-rust-windows-x86_64\falkon-rust.exe
+          $qtDir = if ($env:QT_ROOT_DIR) { $env:QT_ROOT_DIR } else { $env:QT_DIR }
+          & "$qtDir\bin\windeployqt.exe" --release --compiler-runtime --webengine dist\falkon-rust-windows-x86_64\falkon-rust.exe
           
           # Create standalone zip package
           Compress-Archive -Path dist\falkon-rust-windows-x86_64 -DestinationPath dist\falkon-rust-windows-x86_64.zip

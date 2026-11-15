@@ -12,8 +12,9 @@ fn main() {
 
     if target_os == "windows" {
         let qt_dir = std::env::var("QT_DIR")
+            .or_else(|_| std::env::var("QT_ROOT_DIR"))
             .or_else(|_| std::env::var("Qt6_DIR"))
-            .expect("QT_DIR or Qt6_DIR environment variable must be set on Windows");
+            .expect("QT_DIR, QT_ROOT_DIR, or Qt6_DIR environment variable must be set on Windows");
         let qt_path = std::path::Path::new(&qt_dir);
 
         let inc_dir = qt_path.join("include");
