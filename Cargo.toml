@@ -1,0 +1,22 @@
+[package]
+name = "falkon-rust"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "falkon_rust"
+path = "src/lib.rs"
+
+[[bin]]
+name = "falkon-rust"
+path = "src/main.rs"
+
+[dependencies]
+adblock = { version = "0.13.5", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling"] }
+url = "2.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[build-dependencies]
+cc = "1.2"
+pkg-config = "0.3"
