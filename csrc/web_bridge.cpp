@@ -439,6 +439,14 @@ void browser_set_user_agent(BrowserHandle handle, const char* ua) {
     }
 }
 
+void browser_apply_stylesheet(BrowserHandle handle, const char* qss) {
+    auto *ctx = static_cast<BrowserContext*>(handle);
+    if (ctx && qss) {
+        ctx->customUserStyle = QString::fromUtf8(qss);
+        apply_theme_qss(ctx);
+    }
+}
+
 void browser_set_custom_user_style(BrowserHandle handle, const char* css) {
     auto *ctx = static_cast<BrowserContext*>(handle);
     if (ctx && css) {

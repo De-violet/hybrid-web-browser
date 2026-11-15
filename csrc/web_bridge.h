@@ -37,6 +37,7 @@ void browser_configure_ui_ux(
     float default_zoom
 );
 void browser_set_theme(BrowserHandle handle, const char* theme_name, const char* custom_qss);
+void browser_apply_stylesheet(BrowserHandle handle, const char* qss);
 void browser_set_colors(BrowserHandle handle, const char* bg_color, const char* fg_color, const char* accent_color);
 void browser_set_search_engine(BrowserHandle handle, const char* template_url);
 void browser_set_download_dir(BrowserHandle handle, const char* dir);
