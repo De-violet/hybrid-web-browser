@@ -39,6 +39,7 @@
 #include <QFile>
 #include <QTimer>
 #include <QDateTime>
+#include <QMouseEvent>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -104,6 +105,9 @@ struct BrowserContext {
     QAction *bookmarkAction = nullptr;
     QLineEdit *urlBar = nullptr;
     QPushButton *newTabBtn = nullptr;
+    QPushButton *winMinBtn = nullptr;
+    QPushButton *winMaxBtn = nullptr;
+    QPushButton *winCloseBtn = nullptr;
     QPushButton *menuBtn = nullptr;
     QLabel *adblockBadge = nullptr;
     BridgeInterceptor *interceptor = nullptr;
@@ -1377,6 +1381,85 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     tabRowLayout->addWidget(ctx->tabBar);
     tabRowLayout->addWidget(ctx->newTabBtn);
     tabRowLayout->addStretch();
+
+    // 1.1 Window Control Buttons (Minimize, Windowed/Maximize, Close)
+    auto *winCtrlWidget = new QWidget(tabRowWidget);
+    winCtrlWidget->setObjectName("winControls");
+    auto *winCtrlLayout = new QHBoxLayout(winCtrlWidget);
+    winCtrlLayout->setContentsMargins(0, 0, 0, 0);
+    winCtrlLayout->setSpacing(2);
+
+    ctx->winMinBtn = new QPushButton("−", winCtrlWidget);
+    ctx->winMinBtn->setObjectName("winMinBtn");
+    ctx->winMinBtn->setFixedSize(32, 28);
+    ctx->winMinBtn->setToolTip("Minimize");
+    ctx->winMinBtn->setCursor(Qt::PointingHandCursor);
+
+    ctx->winMaxBtn = new QPushButton("□", winCtrlWidget);
+    ctx->winMaxBtn->setObjectName("winMaxBtn");
+    ctx->winMaxBtn->setFixedSize(32, 28);
+    ctx->winMaxBtn->setToolTip("Maximize / Windowed");
+    ctx->winMaxBtn->setCursor(Qt::PointingHandCursor);
+
+    ctx->winCloseBtn = new QPushButton("✕", winCtrlWidget);
+    ctx->winCloseBtn->setObjectName("winCloseBtn");
+    ctx->winCloseBtn->setFixedSize(32, 28);
+    ctx->winCloseBtn->setToolTip("Close");
+    ctx->winCloseBtn->setCursor(Qt::PointingHandCursor);
+
+    winCtrlLayout->addWidget(ctx->winMinBtn);
+    winCtrlLayout->addWidget(ctx->winMaxBtn);
+    winCtrlLayout->addWidget(ctx->winCloseBtn);
+    tabRowLayout->addWidget(winCtrlWidget);
+
+    QObject::connect(ctx->winMinBtn, &QPushButton::clicked, [ctx]() {
+        ctx->window->showMinimized();
+    });
+
+    QObject::connect(ctx->winMaxBtn, &QPushButton::clicked, [ctx]() {
+        if (ctx->window->isMaximized()) {
+            ctx->window->showNormal();
+            ctx->winMaxBtn->setText("□");
+            ctx->winMaxBtn->setToolTip("Maximize");
+        } else {
+            ctx->window->showMaximized();
+            ctx->winMaxBtn->setText("❐");
+            ctx->winMaxBtn->setToolTip("Restore / Windowed");
+        }
+    });
+
+    QObject::connect(ctx->winCloseBtn, &QPushButton::clicked, [ctx]() {
+        ctx->window->close();
+    });
+
+    class WindowStateFilter : public QObject {
+        BrowserContext *m_ctx;
+    public:
+        WindowStateFilter(BrowserContext *ctx, QObject *parent = nullptr)
+            : QObject(parent), m_ctx(ctx) {}
+    protected:
+        bool eventFilter(QObject *obj, QEvent *ev) override {
+            if (ev->type() == QEvent::WindowStateChange && m_ctx && m_ctx->winMaxBtn) {
+                bool max = m_ctx->window->isMaximized();
+                m_ctx->winMaxBtn->setText(max ? "❐" : "□");
+                m_ctx->winMaxBtn->setToolTip(max ? "Restore / Windowed" : "Maximize");
+            } else if (ev->type() == QEvent::MouseButtonDblClick && obj != m_ctx->window) {
+                auto *me = static_cast<QMouseEvent*>(ev);
+                if (me->button() == Qt::LeftButton) {
+                    if (m_ctx->window->isMaximized()) {
+                        m_ctx->window->showNormal();
+                    } else {
+                        m_ctx->window->showMaximized();
+                    }
+                    return true;
+                }
+            }
+            return QObject::eventFilter(obj, ev);
+        }
+    };
+    auto *stateFilter = new WindowStateFilter(ctx, ctx->window);
+    ctx->window->installEventFilter(stateFilter);
+    tabRowWidget->installEventFilter(stateFilter);
 
     // 2. Navigation Bar
     ctx->navBar = new QWidget(centralWidget);

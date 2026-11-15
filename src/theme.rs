@@ -92,6 +92,21 @@ QPushButton#newTabBtn {{
 QPushButton#newTabBtn:hover {{
     background-color: {hover_overlay};
 }}
+QPushButton#winMinBtn, QPushButton#winMaxBtn, QPushButton#winCloseBtn {{
+    background: transparent;
+    color: {fg};
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: bold;
+}}
+QPushButton#winMinBtn:hover, QPushButton#winMaxBtn:hover {{
+    background-color: {hover_overlay};
+}}
+QPushButton#winCloseBtn:hover {{
+    background-color: #e81123;
+    color: #ffffff;
+}}
 QWidget#navBar {{
     background-color: {surface};
     border-bottom: 1px solid {border};
