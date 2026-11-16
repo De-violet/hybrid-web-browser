@@ -83,16 +83,54 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist\falkon-rust-windows-x86_64
           Copy-Item target\release\falkon-rust.exe -Destination dist\falkon-rust-windows-x86_64\
-          Copy-Item target\release\falkon-rust.exe -Destination dist\falkon-rust.exe
           Copy-Item README.md -Destination dist\falkon-rust-windows-x86_64\
           
-          # Deploy Qt runtime dependencies
+          # Deploy Qt runtime dependencies via windeployqt
           $qtDir = if ($env:QT_ROOT_DIR) { $env:QT_ROOT_DIR } else { $env:QT_DIR }
           & "$qtDir\bin\windeployqt.exe" --release --compiler-runtime --no-translations dist\falkon-rust-windows-x86_64\falkon-rust.exe
           $global:LASTEXITCODE = 0
           
-          # Create standalone zip package
-          Compress-Archive -Path dist\falkon-rust-windows-x86_64 -DestinationPath dist\falkon-rust-windows-x86_64.zip
+          # Ensure ALL Qt6 bin DLLs and WebEngine process are present
+          if (Test-Path "$qtDir\bin") {
+            Copy-Item "$qtDir\bin\*.dll" -Destination dist\falkon-rust-windows-x86_64\ -Force
+            if (Test-Path "$qtDir\bin\QtWebEngineProcess.exe") {
+              Copy-Item "$qtDir\bin\QtWebEngineProcess.exe" -Destination dist\falkon-rust-windows-x86_64\ -Force
+            }
+          }
+          
+          # Ensure MSVC C++ Runtime DLLs are present
+          $redistItem = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC" -Recurse -Filter "msvcp140.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($redistItem) {
+            $redistDir = $redistItem.DirectoryName
+            Copy-Item "$redistDir\*.dll" -Destination dist\falkon-rust-windows-x86_64\ -Force
+          }
+          
+          # Ensure Resources and Translations are complete
+          if (Test-Path "$qtDir\resources") {
+            New-Item -ItemType Directory -Force -Path dist\falkon-rust-windows-x86_64\resources
+            Copy-Item -Recurse -Force "$qtDir\resources\*" -Destination dist\falkon-rust-windows-x86_64\resources\
+          }
+          if (Test-Path "$qtDir\translations\qtwebengine_locales") {
+            New-Item -ItemType Directory -Force -Path dist\falkon-rust-windows-x86_64\translations\qtwebengine_locales
+            Copy-Item -Recurse -Force "$qtDir\translations\qtwebengine_locales\*" -Destination dist\falkon-rust-windows-x86_64\translations\qtwebengine_locales\
+          }
+          
+          # Create qt.conf to ensure Qt finds plugins and resources relative to binary
+          Set-Content -Path dist\falkon-rust-windows-x86_64\qt.conf -Value "[Paths]`nPrefix = .`nPlugins = plugins`nLibraries = .`nResources = resources`nTranslations = translations"
+          
+          # Duplicate plugins directory into plugins/ for qt.conf
+          New-Item -ItemType Directory -Force -Path dist\falkon-rust-windows-x86_64\plugins
+          if (Test-Path "$qtDir\plugins") {
+            Copy-Item -Recurse -Force "$qtDir\plugins\*" -Destination dist\falkon-rust-windows-x86_64\plugins\
+          }
+          
+          # Create self-extracting installer if 7-zip is available
+          if (Test-Path "C:\Program Files\7-Zip\7z.exe") {
+            & "C:\Program Files\7-Zip\7z.exe" a -sfx dist\falkon-rust-windows-installer.exe .\dist\falkon-rust-windows-x86_64\*
+          }
+          
+          # Create standalone zip package (flat structure inside zip for easy extraction)
+          Compress-Archive -Path dist\falkon-rust-windows-x86_64\* -DestinationPath dist\falkon-rust-windows-x86_64.zip -Force
 
       # ---------------- Upload Artifacts ----------------
       - name: Upload Artifacts
@@ -110,7 +148,7 @@ jobs:
           files: |
             dist/falkon-rust-linux-x86_64
             dist/falkon-rust-linux-x86_64.tar.gz
-            dist/falkon-rust.exe
+            dist/falkon-rust-windows-installer.exe
             dist/falkon-rust-windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
