@@ -81,20 +81,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist\falkon-rust-windows-x86_64
-          Copy-Item target\release\falkon-rust.exe -Destination dist\falkon-rust-windows-x86_64\
-          Copy-Item README.md -Destination dist\falkon-rust-windows-x86_64\
+          $appDir = "dist\Falkon-Rust"
+          New-Item -ItemType Directory -Force -Path $appDir
+          Copy-Item target\release\falkon-rust.exe -Destination $appDir\
+          Copy-Item README.md -Destination $appDir\
           
           # Deploy Qt runtime dependencies via windeployqt
           $qtDir = if ($env:QT_ROOT_DIR) { $env:QT_ROOT_DIR } else { $env:QT_DIR }
-          & "$qtDir\bin\windeployqt.exe" --release --compiler-runtime --no-translations dist\falkon-rust-windows-x86_64\falkon-rust.exe
+          & "$qtDir\bin\windeployqt.exe" --release --compiler-runtime --no-translations "$appDir\falkon-rust.exe"
           $global:LASTEXITCODE = 0
           
           # Ensure ALL Qt6 bin DLLs and WebEngine process are present
           if (Test-Path "$qtDir\bin") {
-            Copy-Item "$qtDir\bin\*.dll" -Destination dist\falkon-rust-windows-x86_64\ -Force
+            Copy-Item "$qtDir\bin\*.dll" -Destination $appDir\ -Force
             if (Test-Path "$qtDir\bin\QtWebEngineProcess.exe") {
-              Copy-Item "$qtDir\bin\QtWebEngineProcess.exe" -Destination dist\falkon-rust-windows-x86_64\ -Force
+              Copy-Item "$qtDir\bin\QtWebEngineProcess.exe" -Destination $appDir\ -Force
             }
           }
           
@@ -102,35 +103,35 @@ jobs:
           $redistItem = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC" -Recurse -Filter "msvcp140.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($redistItem) {
             $redistDir = $redistItem.DirectoryName
-            Copy-Item "$redistDir\*.dll" -Destination dist\falkon-rust-windows-x86_64\ -Force
+            Copy-Item "$redistDir\*.dll" -Destination $appDir\ -Force
           }
           
           # Ensure Resources and Translations are complete
           if (Test-Path "$qtDir\resources") {
-            New-Item -ItemType Directory -Force -Path dist\falkon-rust-windows-x86_64\resources
-            Copy-Item -Recurse -Force "$qtDir\resources\*" -Destination dist\falkon-rust-windows-x86_64\resources\
+            New-Item -ItemType Directory -Force -Path "$appDir\resources"
+            Copy-Item -Recurse -Force "$qtDir\resources\*" -Destination "$appDir\resources\"
           }
           if (Test-Path "$qtDir\translations\qtwebengine_locales") {
-            New-Item -ItemType Directory -Force -Path dist\falkon-rust-windows-x86_64\translations\qtwebengine_locales
-            Copy-Item -Recurse -Force "$qtDir\translations\qtwebengine_locales\*" -Destination dist\falkon-rust-windows-x86_64\translations\qtwebengine_locales\
+            New-Item -ItemType Directory -Force -Path "$appDir\translations\qtwebengine_locales"
+            Copy-Item -Recurse -Force "$qtDir\translations\qtwebengine_locales\*" -Destination "$appDir\translations\qtwebengine_locales\"
           }
           
           # Create qt.conf to ensure Qt finds plugins and resources relative to binary
-          Set-Content -Path dist\falkon-rust-windows-x86_64\qt.conf -Value "[Paths]`nPrefix = .`nPlugins = plugins`nLibraries = .`nResources = resources`nTranslations = translations"
+          Set-Content -Path "$appDir\qt.conf" -Value "[Paths]`nPrefix = .`nPlugins = plugins`nLibraries = .`nResources = resources`nTranslations = translations"
           
           # Duplicate plugins directory into plugins/ for qt.conf
-          New-Item -ItemType Directory -Force -Path dist\falkon-rust-windows-x86_64\plugins
+          New-Item -ItemType Directory -Force -Path "$appDir\plugins"
           if (Test-Path "$qtDir\plugins") {
-            Copy-Item -Recurse -Force "$qtDir\plugins\*" -Destination dist\falkon-rust-windows-x86_64\plugins\
+            Copy-Item -Recurse -Force "$qtDir\plugins\*" -Destination "$appDir\plugins\"
           }
           
-          # Create self-extracting installer if 7-zip is available
+          # Create self-extracting installer if 7-zip is available (packs Falkon-Rust as root folder)
           if (Test-Path "C:\Program Files\7-Zip\7z.exe") {
-            & "C:\Program Files\7-Zip\7z.exe" a -sfx dist\falkon-rust-windows-installer.exe .\dist\falkon-rust-windows-x86_64\*
+            & "C:\Program Files\7-Zip\7z.exe" a -sfx dist\falkon-rust-windows-installer.exe .\dist\Falkon-Rust
           }
           
-          # Create standalone zip package (flat structure inside zip for easy extraction)
-          Compress-Archive -Path dist\falkon-rust-windows-x86_64\* -DestinationPath dist\falkon-rust-windows-x86_64.zip -Force
+          # Create standalone zip package (packs Falkon-Rust as root folder so extraction creates a single folder)
+          Compress-Archive -Path dist\Falkon-Rust -DestinationPath dist\falkon-rust-windows-x86_64.zip -Force
 
       # ---------------- Upload Artifacts ----------------
       - name: Upload Artifacts
