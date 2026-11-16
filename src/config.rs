@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs::{create_dir_all, read_to_string, File};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn default_homepage() -> String {
     "falkon:home".to_string()
@@ -13,8 +13,18 @@ fn default_theme() -> String {
     "dark".to_string()
 }
 fn default_download_dir() -> String {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    format!("{}/Downloads", home)
+    if let Ok(xdg_dl) = std::env::var("XDG_DOWNLOAD_DIR") {
+        if !xdg_dl.trim().is_empty() {
+            return xdg_dl;
+        }
+    }
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home)
+        .join("Downloads")
+        .to_string_lossy()
+        .to_string()
 }
 fn default_user_agent() -> String {
     "".to_string()
@@ -50,10 +60,33 @@ fn default_border_color() -> String {
     "#313244".to_string()
 }
 fn default_bg_opacity() -> f32 {
-    0.85
+    0.88
 }
 fn default_ui_density() -> String {
     "comfortable".to_string()
+}
+fn default_custom_rules() -> Vec<String> {
+    vec![
+        "||analytics.*^".to_string(),
+        "||telemetry.*^".to_string(),
+    ]
+}
+
+pub fn resolve_config_dir() -> PathBuf {
+    if let Ok(custom_dir) = std::env::var("FALKON_RUST_CONFIG_DIR") {
+        if !custom_dir.trim().is_empty() {
+            return PathBuf::from(custom_dir);
+        }
+    }
+    if let Ok(xdg_cfg) = std::env::var("XDG_CONFIG_HOME") {
+        if !xdg_cfg.trim().is_empty() {
+            return PathBuf::from(xdg_cfg).join("falkon-rust");
+        }
+    }
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(".config").join("falkon-rust")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,7 +98,7 @@ pub struct BrowserConfig {
     pub search_engine: String,
 
     #[serde(default = "default_theme")]
-    pub theme: String, // "dark", "light", "nord", "gruvbox", "custom"
+    pub theme: String, // "dark", "catppuccin", "light", "minimal", "nord", "gruvbox", "custom"
 
     #[serde(default = "default_bg_color")]
     pub bg_color: String,
@@ -130,7 +163,7 @@ pub struct BrowserConfig {
     #[serde(default = "default_window_height")]
     pub window_height: i32,
 
-    #[serde(default)]
+    #[serde(default = "default_custom_rules")]
     pub custom_rules: Vec<String>,
 }
 
@@ -161,10 +194,7 @@ impl Default for BrowserConfig {
             user_agent: default_user_agent(),
             window_width: default_window_width(),
             window_height: default_window_height(),
-            custom_rules: vec![
-                "||analytics.*^".to_string(),
-                "||telemetry.*^".to_string(),
-            ],
+            custom_rules: default_custom_rules(),
         }
     }
 }
@@ -179,10 +209,11 @@ pub struct ConfigManager {
 
 impl ConfigManager {
     pub fn load() -> Self {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        let mut dir = PathBuf::from(home);
-        dir.push(".config");
-        dir.push("falkon-rust");
+        Self::load_from_dir(resolve_config_dir())
+    }
+
+    pub fn load_from_dir<P: AsRef<Path>>(dir_path: P) -> Self {
+        let dir = dir_path.as_ref().to_path_buf();
         let _ = create_dir_all(&dir);
 
         let config_file = dir.join("config.json");
@@ -194,12 +225,15 @@ impl ConfigManager {
         } else {
             let def = BrowserConfig::default();
             if let Ok(mut f) = File::create(&config_file) {
-                let _ = f.write_all(serde_json::to_string_pretty(&def).unwrap_or_default().as_bytes());
+                let _ = f.write_all(
+                    serde_json::to_string_pretty(&def)
+                        .unwrap_or_default()
+                        .as_bytes(),
+                );
             }
             def
         };
 
-        // Load optional custom style files
         let qss_file = dir.join("user_chrome.qss");
         let user_chrome_qss = if qss_file.exists() {
             read_to_string(qss_file).ok()
@@ -217,5 +251,13 @@ impl ConfigManager {
             user_style_css,
             user_script_js,
         }
+    }
+
+    pub fn save(&self) -> Result<(), String> {
+        let _ = create_dir_all(&self.dir);
+        let config_file = self.dir.join("config.json");
+        let json = serde_json::to_string_pretty(&self.config).map_err(|e| e.to_string())?;
+        let mut f = File::create(&config_file).map_err(|e| e.to_string())?;
+        f.write_all(json.as_bytes()).map_err(|e| e.to_string())
     }
 }

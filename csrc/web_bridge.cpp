@@ -10,10 +10,13 @@
 #include <QWebEngineView>
 #include <QWebEngineProfile>
 #include <QWebEnginePage>
+#include <QWebEngineFindTextResult>
 #include <QWebEngineSettings>
+#include <QWebEngineFullScreenRequest>
 #include <QWebEngineUrlRequestInterceptor>
 #include <QWebEngineUrlRequestInfo>
 #include <QWebEngineDownloadRequest>
+#include <QWebEngineHistory>
 #include <QShortcut>
 #include <QKeySequence>
 #include <QStandardPaths>
@@ -21,6 +24,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QProgressBar>
 #include <QMenu>
 #include <QDialog>
 #include <QComboBox>
@@ -35,6 +39,7 @@
 #include <QWidgetAction>
 #include <QListWidget>
 #include <QInputDialog>
+#include <QMessageBox>
 #include <QAction>
 #include <QFile>
 #include <QTimer>
@@ -59,6 +64,9 @@ extern "C" {
         const char* bg, const char* surface, const char* fg, const char* accent, const char* border,
         float opacity, const char* density, const char* custom_qss, const char* close_icon, const char* close_hover
     );
+    char* rust_get_cosmetic_css(const char* url);
+    void rust_set_adblock_enabled(bool enabled);
+    void rust_clear_history();
     void rust_free_c_str(char* ptr);
 }
 
@@ -89,18 +97,34 @@ struct TabMeta {
     QString savedTitle;
     qint64 lastActive = 0;
     bool isSuspended = false;
+    bool isPrivate = false;
+};
+
+struct ClosedTabEntry {
+    QString url;
+    QString title;
+};
+
+struct DownloadItemMeta {
+    QString fileName;
+    QString stateText;
+    qint64 receivedBytes = 0;
+    qint64 totalBytes = 0;
 };
 
 struct BrowserContext {
     QApplication *app = nullptr;
     QMainWindow *window = nullptr;
+    QVBoxLayout *mainLayout = nullptr;
+    QWidget *tabRowWidget = nullptr;
     QTabBar *tabBar = nullptr;
     QStackedWidget *viewStack = nullptr;
     QWidget *navBar = nullptr;
+    QProgressBar *loadProgressBar = nullptr;
     QPushButton *backBtn = nullptr;
     QPushButton *forwardBtn = nullptr;
     QPushButton *reloadBtn = nullptr;
-    QPushButton *engineToggleBtn = nullptr;
+    QAction *securityAction = nullptr;
     QAction *engineAction = nullptr;
     QAction *bookmarkAction = nullptr;
     QLineEdit *urlBar = nullptr;
@@ -109,27 +133,49 @@ struct BrowserContext {
     QPushButton *winMaxBtn = nullptr;
     QPushButton *winCloseBtn = nullptr;
     QPushButton *menuBtn = nullptr;
+    QLabel *privateBadge = nullptr;
     QLabel *adblockBadge = nullptr;
+
+    // Inline Find Bar
+    QWidget *findBar = nullptr;
+    QLineEdit *findInput = nullptr;
+    QLabel *findStatusLabel = nullptr;
+
+    // Bottom Status / Toast Bar
+    QWidget *statusBarWidget = nullptr;
+    QLabel *statusHoverLabel = nullptr;
+    QLabel *statusToastLabel = nullptr;
+
+    QWebEngineProfile *privateProfile = nullptr;
     BridgeInterceptor *interceptor = nullptr;
     RustTabCallback tabCallback = nullptr;
     RustTabCloseCallback tabCloseCallback = nullptr;
+    RustTabMoveCallback tabMoveCallback = nullptr;
     QTimer *memoryTimer = nullptr;
 
     std::vector<TabMeta> tabs;
-    bool useGoogleSearch = true; // default: Google
+    std::vector<ClosedTabEntry> closedTabs;
+    std::vector<DownloadItemMeta> downloads;
+
+    bool useGoogleSearch = true;
     QString customSearchEngine;
     QString downloadDir;
-    QString customUserStyle;
-    QString customUserScript;
+    QString customChromeQss;   // QSS untuk antarmuka Qt
+    QString customPageCss;     // CSS untuk injeksi halaman web (user_style.css)
+    QString customUserScript;  // JS untuk injeksi halaman web (user_script.js)
+    QString customUserAgent;
     float currentZoom = 1.0f;
     bool ownApp = false;
+    bool showNewTabButton = true;
+    bool enableAdblock = true;
+    bool enableCosmeticFilter = true;
     QString currentTheme = "dark";
     QString bgColor = "#181825";
     QString fgColor = "#cdd6f4";
     QString accentColor = "#89b4fa";
     QString surfaceColor = "#1e1e2e";
     QString borderColor = "#313244";
-    float bgOpacity = 0.85f;
+    float bgOpacity = 0.88f;
     QString uiDensity = "comfortable";
     QString tabPosition = "top";
     bool showHomeSearch = true;
@@ -137,13 +183,17 @@ struct BrowserContext {
     bool showHomeClock = true;
 };
 
+static int create_tab_internal(BrowserContext *ctx, const char* raw_url, bool is_private);
+static void show_status_toast(BrowserContext *ctx, const QString &msg, int timeoutMs = 3000);
+
 class BrowserPage : public QWebEnginePage {
 public:
-    explicit BrowserPage(BrowserContext *ctx, QObject *parent = nullptr)
-        : QWebEnginePage(parent), m_ctx(ctx) {}
+    explicit BrowserPage(BrowserContext *ctx, QWebEngineProfile *profile, QObject *parent = nullptr)
+        : QWebEnginePage(profile, parent), m_ctx(ctx) {}
 
 protected:
     bool acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) override;
+    QWebEnginePage* createWindow(WebWindowType type) override;
 
 private:
     BrowserContext *m_ctx = nullptr;
@@ -167,220 +217,88 @@ void browser_set_tab_close_callback(BrowserHandle handle, RustTabCloseCallback c
     }
 }
 
+void browser_set_tab_move_callback(BrowserHandle handle, RustTabMoveCallback cb) {
+    auto *ctx = static_cast<BrowserContext*>(handle);
+    if (ctx) {
+        ctx->tabMoveCallback = cb;
+    }
+}
+
+static void update_tab_bar_placement(BrowserContext *ctx) {
+    if (!ctx || !ctx->mainLayout || !ctx->tabRowWidget || !ctx->navBar || !ctx->viewStack) return;
+
+    if (ctx->tabPosition == "hidden") {
+        ctx->tabRowWidget->hide();
+        return;
+    }
+
+    ctx->tabRowWidget->show();
+    if (ctx->tabBar) {
+        ctx->tabBar->show();
+        ctx->tabBar->setShape(ctx->tabPosition == "bottom" ? QTabBar::RoundedSouth : QTabBar::RoundedNorth);
+    }
+    if (ctx->newTabBtn) {
+        ctx->newTabBtn->setVisible(ctx->showNewTabButton);
+    }
+
+    ctx->mainLayout->removeWidget(ctx->tabRowWidget);
+    if (ctx->tabPosition == "bottom") {
+        int stackIdx = ctx->mainLayout->indexOf(ctx->viewStack);
+        ctx->mainLayout->insertWidget(stackIdx + 1, ctx->tabRowWidget);
+    } else {
+        ctx->mainLayout->insertWidget(0, ctx->tabRowWidget);
+    }
+}
+
 static void apply_theme_qss(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
 
     QString closeSvg = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/tab_close.svg";
     QString closeHoverSvg = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/tab_close_hover.svg";
 
-    QColor bg(ctx->bgColor);
-    if (!bg.isValid()) bg = QColor("#181825");
-    float op = qBound(0.2f, ctx->bgOpacity, 1.0f);
-    QString bgRgba = QString("rgba(%1, %2, %3, %4)").arg(bg.red()).arg(bg.green()).arg(bg.blue()).arg(op);
-    QString surfaceRgba = ctx->surfaceColor.isEmpty() ? "#1e1e2e" : ctx->surfaceColor;
-    QString fg = ctx->fgColor.isEmpty() ? "#cdd6f4" : ctx->fgColor;
-    QString accent = ctx->accentColor.isEmpty() ? "#89b4fa" : ctx->accentColor;
-    QString border = ctx->borderColor.isEmpty() ? "#313244" : ctx->borderColor;
+    char* rawQss = rust_get_theme_qss(
+        ctx->bgColor.toUtf8().constData(),
+        ctx->surfaceColor.toUtf8().constData(),
+        ctx->fgColor.toUtf8().constData(),
+        ctx->accentColor.toUtf8().constData(),
+        ctx->borderColor.toUtf8().constData(),
+        ctx->bgOpacity,
+        ctx->uiDensity.toUtf8().constData(),
+        ctx->customChromeQss.toUtf8().constData(),
+        closeSvg.toUtf8().constData(),
+        closeHoverSvg.toUtf8().constData()
+    );
 
-    bool isLight = bg.lightness() > 128;
-    QString hoverOverlay = isLight ? "rgba(0, 0, 0, 0.06)" : "rgba(255, 255, 255, 0.08)";
-    QString activeHoverOverlay = isLight ? "rgba(0, 0, 0, 0.10)" : "rgba(255, 255, 255, 0.14)";
-
-    bool isCompact = (ctx->uiDensity == "compact");
-    QString tabPadding = isCompact ? "7px 16px" : "11px 24px";
-    QString tabMinW = isCompact ? "110px" : "140px";
-    QString urlPadding = isCompact ? "7px 16px" : "10px 20px";
-    QString urlFontSize = isCompact ? "13px" : "14px";
-
-    QString qss = QString(R"QSS(
-QMainWindow { background-color: %1; }
-QWidget { color: %2; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif; font-size: 13px; }
-QWidget#tabStrip { background-color: %1; }
-QTabBar { background: transparent; border: none; }
-QTabBar::tab {
-    background-color: transparent;
-    color: %2;
-    border: none;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-    padding: %3;
-    margin-right: 4px;
-    min-width: %4;
-    max-width: 260px;
-    font-size: 13px;
-    font-weight: 500;
-}
-QTabBar::tab:hover:!selected {
-    background-color: %10;
-    color: %2;
-}
-QTabBar::tab:selected {
-    background-color: %5;
-    color: %6;
-    font-weight: 600;
-    border-top: 1px solid rgba(255, 255, 255, 0.16);
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-}
-QTabBar::close-button {
-    subcontrol-position: right;
-    margin-right: 6px;
-    border-radius: 4px;
-    width: 14px;
-    height: 14px;
-    background: transparent;
-    image: url(@CLOSE_ICON@);
-}
-QTabBar::close-button:hover {
-    image: url(@CLOSE_HOVER@);
-    background-color: %11;
-}
-QPushButton#newTabBtn {
-    background: transparent;
-    color: %2;
-    border: none;
-    border-radius: 8px;
-    font-size: 18px;
-    font-weight: normal;
-}
-QPushButton#newTabBtn:hover {
-    background-color: %10;
-}
-QWidget#navBar {
-    background-color: %5;
-    border-bottom: 1px solid %7;
-}
-QPushButton#iconBtn, QPushButton#engineBtn {
-    background-color: transparent;
-    color: %2;
-    border: none;
-    border-radius: 8px;
-    padding: 4px;
-    font-size: 16px;
-}
-QPushButton#iconBtn::menu-indicator, QPushButton::menu-indicator {
-    image: none;
-    width: 0px;
-}
-QPushButton#iconBtn:hover, QPushButton#engineBtn:hover {
-    background-color: %10;
-}
-QPushButton#iconBtn:pressed, QPushButton#engineBtn:pressed {
-    background-color: %11;
-}
-QPushButton#iconBtn:disabled {
-    color: %7;
-}
-QLineEdit#urlBar {
-    background-color: rgba(0, 0, 0, 0.40);
-    color: %2;
-    border: 1px solid %7;
-    border-radius: 14px;
-    padding: %8;
-    font-size: %9;
-    selection-background-color: %7;
-}
-QLineEdit#urlBar:hover {
-    border: 1px solid rgba(255, 255, 255, 0.28);
-    background-color: rgba(0, 0, 0, 0.48);
-}
-QLineEdit#urlBar:focus {
-    border: 1.5px solid %6;
-    background-color: rgba(0, 0, 0, 0.72);
-    color: #ffffff;
-}
-QLabel#adblockBadge {
-    background-color: rgba(166, 227, 161, 0.12);
-    color: #a6e3a1;
-    border: 1px solid rgba(166, 227, 161, 0.25);
-    border-radius: 13px;
-    padding: 4px 12px;
-    font-size: 11px;
-    font-weight: 600;
-}
-QMenu {
-    background-color: %5;
-    color: %2;
-    border: 1px solid %7;
-    border-radius: 8px;
-    padding: 6px;
-}
-QMenu::item {
-    padding: 6px 24px;
-    border-radius: 4px;
-}
-QMenu::shortcut {
-    color: %2;
-    padding-left: 20px;
-    opacity: 0.7;
-}
-QMenu::item:selected {
-    background-color: %7;
-    color: %6;
-}
-QMenu::separator {
-    height: 1px;
-    background: %7;
-    margin: 4px 0px;
-}
-)QSS")
-    .arg(bgRgba)
-    .arg(fg)
-    .arg(tabPadding)
-    .arg(tabMinW)
-    .arg(surfaceRgba)
-    .arg(accent)
-    .arg(border)
-    .arg(urlPadding)
-    .arg(urlFontSize)
-    .arg(hoverOverlay)
-    .arg(activeHoverOverlay);
-
-    qss.replace("@CLOSE_ICON@", closeSvg).replace("@CLOSE_HOVER@", closeHoverSvg);
-
-    if (!ctx->customUserStyle.isEmpty()) {
-        qss += "\n/* User Custom QSS */\n" + ctx->customUserStyle;
+    if (rawQss) {
+        QString qss = QString::fromUtf8(rawQss);
+        rust_free_c_str(rawQss);
+        ctx->window->setStyleSheet(qss);
     }
 
-    ctx->window->setStyleSheet(qss);
-
-    if (ctx->tabBar) {
-        if (ctx->tabPosition == "hidden") {
-            ctx->tabBar->hide();
-            if (ctx->newTabBtn) ctx->newTabBtn->hide();
-        } else {
-            ctx->tabBar->show();
-            if (ctx->newTabBtn) ctx->newTabBtn->show();
-            if (ctx->tabPosition == "left") {
-                ctx->tabBar->setShape(QTabBar::RoundedWest);
-            } else {
-                ctx->tabBar->setShape(QTabBar::RoundedNorth);
-            }
-        }
-    }
+    update_tab_bar_placement(ctx);
 }
 
 void browser_set_theme(BrowserHandle handle, const char* theme_name, const char* custom_qss) {
     auto *ctx = static_cast<BrowserContext*>(handle);
     if (!ctx || !ctx->window) return;
 
-    if (custom_qss && custom_qss[0] != '\0') {
-        ctx->customUserStyle = QString::fromUtf8(custom_qss);
+    if (custom_qss) {
+        ctx->customChromeQss = QString::fromUtf8(custom_qss);
     }
 
     if (theme_name) {
         QString t = QString::fromUtf8(theme_name).toLower();
         ctx->currentTheme = t;
         if (t == "dark_glass" || t == "dark") {
-            ctx->bgColor = "#11111b"; ctx->surfaceColor = "#181825"; ctx->fgColor = "#cdd6f4"; ctx->accentColor = "#89b4fa"; ctx->borderColor = "#313244"; ctx->bgOpacity = 0.85f;
+            ctx->bgColor = "#11111b"; ctx->surfaceColor = "#181825"; ctx->fgColor = "#cdd6f4"; ctx->accentColor = "#89b4fa"; ctx->borderColor = "#313244"; ctx->bgOpacity = 0.88f;
         } else if (t == "catppuccin") {
             ctx->bgColor = "#1e1e2e"; ctx->surfaceColor = "#181825"; ctx->fgColor = "#cdd6f4"; ctx->accentColor = "#cba6f7"; ctx->borderColor = "#45475a"; ctx->bgOpacity = 0.92f;
         } else if (t == "light") {
-            ctx->bgColor = "#eff1f5"; ctx->surfaceColor = "#e6e9ef"; ctx->fgColor = "#4c4f69"; ctx->accentColor = "#1e66f5"; ctx->borderColor = "#ccd0da"; ctx->bgOpacity = 0.95f;
+            ctx->bgColor = "#eff1f5"; ctx->surfaceColor = "#e6e9ef"; ctx->fgColor = "#4c4f69"; ctx->accentColor = "#1e66f5"; ctx->borderColor = "#ccd0da"; ctx->bgOpacity = 0.96f;
         } else if (t == "minimal") {
-            ctx->bgColor = "#121212"; ctx->surfaceColor = "#1c1c1c"; ctx->fgColor = "#e0e0e0"; ctx->accentColor = "#ffffff"; ctx->borderColor = "#2c2c2c"; ctx->bgOpacity = 0.90f;
+            ctx->bgColor = "#121212"; ctx->surfaceColor = "#1c1c1c"; ctx->fgColor = "#e0e0e0"; ctx->accentColor = "#ffffff"; ctx->borderColor = "#2c2c2c"; ctx->bgOpacity = 0.92f;
         } else if (t == "nord") {
-            ctx->bgColor = "#2e3440"; ctx->surfaceColor = "#242933"; ctx->fgColor = "#eceff4"; ctx->accentColor = "#88c0d0"; ctx->borderColor = "#3b4252"; ctx->bgOpacity = 0.90f;
+            ctx->bgColor = "#2e3440"; ctx->surfaceColor = "#242933"; ctx->fgColor = "#eceff4"; ctx->accentColor = "#88c0d0"; ctx->borderColor = "#3b4252"; ctx->bgOpacity = 0.92f;
         } else if (t == "gruvbox") {
             ctx->bgColor = "#282828"; ctx->surfaceColor = "#1d2021"; ctx->fgColor = "#ebdbb2"; ctx->accentColor = "#fe8019"; ctx->borderColor = "#3c3836"; ctx->bgOpacity = 0.92f;
         }
@@ -409,13 +327,14 @@ void browser_configure_ui_ux(
     auto *ctx = static_cast<BrowserContext*>(handle);
     if (!ctx) return;
 
-    if (tab_position == 2) {
+    if (tab_position == 1) {
+        ctx->tabPosition = "bottom";
+    } else if (tab_position == 2) {
         ctx->tabPosition = "hidden";
-    } else if (tab_position == 3) {
-        ctx->tabPosition = "left";
     } else {
         ctx->tabPosition = "top";
     }
+    ctx->showNewTabButton = show_new_tab_button;
 
     apply_theme_qss(ctx);
 
@@ -439,7 +358,13 @@ void browser_configure_ui_ux(
 void browser_set_search_engine(BrowserHandle handle, const char* template_url) {
     auto *ctx = static_cast<BrowserContext*>(handle);
     if (ctx && template_url) {
-        ctx->customSearchEngine = QString::fromUtf8(template_url);
+        QString tpl = QString::fromUtf8(template_url).trimmed();
+        ctx->customSearchEngine = tpl;
+        if (tpl.contains("duckduckgo", Qt::CaseInsensitive)) {
+            ctx->useGoogleSearch = false;
+        } else if (tpl.contains("google", Qt::CaseInsensitive)) {
+            ctx->useGoogleSearch = true;
+        }
     }
 }
 
@@ -451,16 +376,21 @@ void browser_set_download_dir(BrowserHandle handle, const char* dir) {
 }
 
 void browser_set_user_agent(BrowserHandle handle, const char* ua) {
-    (void)handle;
+    auto *ctx = static_cast<BrowserContext*>(handle);
     if (ua && ua[0] != '\0') {
-        QWebEngineProfile::defaultProfile()->setHttpUserAgent(QString::fromUtf8(ua));
+        QString uaStr = QString::fromUtf8(ua);
+        if (ctx) ctx->customUserAgent = uaStr;
+        QWebEngineProfile::defaultProfile()->setHttpUserAgent(uaStr);
+        if (ctx && ctx->privateProfile) {
+            ctx->privateProfile->setHttpUserAgent(uaStr);
+        }
     }
 }
 
 void browser_apply_stylesheet(BrowserHandle handle, const char* qss) {
     auto *ctx = static_cast<BrowserContext*>(handle);
     if (ctx && qss) {
-        ctx->customUserStyle = QString::fromUtf8(qss);
+        ctx->customChromeQss = QString::fromUtf8(qss);
         apply_theme_qss(ctx);
     }
 }
@@ -468,7 +398,7 @@ void browser_apply_stylesheet(BrowserHandle handle, const char* qss) {
 void browser_set_custom_user_style(BrowserHandle handle, const char* css) {
     auto *ctx = static_cast<BrowserContext*>(handle);
     if (ctx && css) {
-        ctx->customUserStyle = QString::fromUtf8(css);
+        ctx->customPageCss = QString::fromUtf8(css);
     }
 }
 
@@ -481,16 +411,31 @@ void browser_set_custom_user_script(BrowserHandle handle, const char* js) {
 
 static bool is_url_bookmarked(const QString &url);
 static void update_bookmark_button(BrowserContext *ctx, bool isBookmarked);
+static void update_security_indicator(BrowserContext *ctx, const QString &url);
+
+static void update_nav_buttons_state(BrowserContext *ctx) {
+    if (!ctx || !ctx->viewStack) return;
+    auto *view = qobject_cast<QWebEngineView*>(ctx->viewStack->currentWidget());
+    if (view && view->history()) {
+        if (ctx->backBtn) ctx->backBtn->setEnabled(view->history()->canGoBack());
+        if (ctx->forwardBtn) ctx->forwardBtn->setEnabled(view->history()->canGoForward());
+    }
+}
 
 static void update_url_bar_for_current_tab(BrowserContext *ctx) {
     if (!ctx || !ctx->tabBar || !ctx->urlBar || !ctx->viewStack) return;
     int idx = ctx->tabBar->currentIndex();
     QString currentUrl;
     if (idx >= 0 && idx < static_cast<int>(ctx->tabs.size())) {
+        if (ctx->privateBadge) {
+            ctx->privateBadge->setVisible(ctx->tabs[idx].isPrivate);
+        }
         if (ctx->tabs[idx].isSuspended) {
             currentUrl = ctx->tabs[idx].savedUrl;
             ctx->urlBar->setText(currentUrl);
             update_bookmark_button(ctx, is_url_bookmarked(currentUrl));
+            update_security_indicator(ctx, currentUrl);
+            update_nav_buttons_state(ctx);
             return;
         }
     }
@@ -499,7 +444,9 @@ static void update_url_bar_for_current_tab(BrowserContext *ctx) {
         currentUrl = currentView->url().toString();
         if (currentUrl == "falkon:home") {
             ctx->urlBar->setText("");
-            ctx->urlBar->setPlaceholderText("Search Google or type a URL... (Ctrl+L)");
+            ctx->urlBar->setPlaceholderText(ctx->useGoogleSearch
+                ? "Cari di Google atau ketik alamat URL... (Ctrl+L)"
+                : "Cari di DuckDuckGo atau ketik alamat URL... (Ctrl+L)");
             update_bookmark_button(ctx, false);
         } else if (currentUrl == "falkon:settings") {
             ctx->urlBar->setText("falkon:settings");
@@ -508,6 +455,8 @@ static void update_url_bar_for_current_tab(BrowserContext *ctx) {
             ctx->urlBar->setText(currentUrl);
             update_bookmark_button(ctx, is_url_bookmarked(currentUrl));
         }
+        update_security_indicator(ctx, currentUrl);
+        update_nav_buttons_state(ctx);
     }
 }
 
@@ -520,6 +469,7 @@ static void adjust_zoom(BrowserContext *ctx, float delta) {
         if (z > 3.0f) z = 3.0f;
         ctx->currentZoom = z;
         view->setZoomFactor(z);
+        show_status_toast(ctx, QString("Zoom: %1%").arg(static_cast<int>(z * 100.0f)), 1500);
     }
 }
 
@@ -529,6 +479,7 @@ static void run_smart_memory_cleanup(BrowserContext *ctx) {
 
     int activeIdx = ctx->tabBar->currentIndex();
     qint64 now = QDateTime::currentSecsSinceEpoch();
+    int suspendedCount = 0;
 
     for (size_t i = 0; i < ctx->tabs.size(); ++i) {
         if (static_cast<int>(i) == activeIdx) {
@@ -547,16 +498,20 @@ static void run_smart_memory_cleanup(BrowserContext *ctx) {
         // Suspend tabs inactive for > 120s or if total tabs > 3
         if ((now - meta.lastActive > 120) || (ctx->tabs.size() > 3 && now - meta.lastActive > 45)) {
             QString currentUrl = meta.view->url().toString();
-            if (!currentUrl.isEmpty() && currentUrl != "about:blank") {
+            if (!currentUrl.isEmpty() && currentUrl != "about:blank" && currentUrl != "falkon:home" && currentUrl != "falkon:settings") {
                 meta.savedUrl = currentUrl;
                 meta.savedTitle = ctx->tabBar->tabText(static_cast<int>(i));
                 meta.isSuspended = true;
 
-                // Unload content to free up RAM
                 meta.view->load(QUrl("about:blank"));
                 ctx->tabBar->setTabText(static_cast<int>(i), "💤 " + meta.savedTitle);
+                suspendedCount++;
             }
         }
+    }
+
+    if (suspendedCount > 0) {
+        show_status_toast(ctx, QString("Smart Memory: %1 tab disuspensi untuk hemat RAM").arg(suspendedCount), 2500);
     }
 }
 
@@ -577,29 +532,54 @@ static const char* DDG_SVG =
     "<path fill='#4BA3E3' d='M22 34c2 0 5-1 7-3l-2-2c-2 1-4 1-5 1v4z'/>"
     "</svg>";
 
+static const char* LOCK_HTTPS_SVG =
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='#a6e3a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+    "<rect x='3' y='11' width='18' height='11' rx='2' ry='2'/>"
+    "<path d='M7 11V7a5 5 0 0 1 10 0v4'/>"
+    "</svg>";
+
+static const char* UNLOCK_HTTP_SVG =
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='#f38ba8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+    "<rect x='3' y='11' width='18' height='11' rx='2' ry='2'/>"
+    "<path d='M7 11V7a5 5 0 0 1 9.9-1'/>"
+    "</svg>";
+
+static const char* INTERNAL_PAGE_SVG =
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='#89b4fa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+    "<circle cx='12' cy='12' r='10'/>"
+    "<line x1='12' y1='16' x2='12' y2='12'/>"
+    "<line x1='12' y1='8' x2='12.01' y2='8'/>"
+    "</svg>";
+
+static void update_security_indicator(BrowserContext *ctx, const QString &url) {
+    if (!ctx || !ctx->securityAction) return;
+    QPixmap px;
+    if (url.startsWith("https://")) {
+        px.loadFromData(reinterpret_cast<const uchar*>(LOCK_HTTPS_SVG), static_cast<uint>(strlen(LOCK_HTTPS_SVG)), "SVG");
+        ctx->securityAction->setIcon(QIcon(px));
+        ctx->securityAction->setToolTip("Koneksi Aman (HTTPS Terenkripsi)");
+    } else if (url.startsWith("http://")) {
+        px.loadFromData(reinterpret_cast<const uchar*>(UNLOCK_HTTP_SVG), static_cast<uint>(strlen(UNLOCK_HTTP_SVG)), "SVG");
+        ctx->securityAction->setIcon(QIcon(px));
+        ctx->securityAction->setToolTip("Koneksi Tidak Terenkripsi (HTTP)");
+    } else {
+        px.loadFromData(reinterpret_cast<const uchar*>(INTERNAL_PAGE_SVG), static_cast<uint>(strlen(INTERNAL_PAGE_SVG)), "SVG");
+        ctx->securityAction->setIcon(QIcon(px));
+        ctx->securityAction->setToolTip("Halaman Internal Falkon-Rust");
+    }
+}
+
 static void update_search_engine_button(BrowserContext *ctx) {
     if (!ctx) return;
     QPixmap px;
     if (ctx->useGoogleSearch) {
         px.loadFromData(reinterpret_cast<const uchar*>(GOOGLE_SVG), static_cast<uint>(strlen(GOOGLE_SVG)), "SVG");
-        if (ctx->engineToggleBtn) {
-            ctx->engineToggleBtn->setIcon(QIcon(px));
-            ctx->engineToggleBtn->setIconSize(QSize(18, 18));
-            ctx->engineToggleBtn->setText("");
-            ctx->engineToggleBtn->setToolTip("Google Search aktif (Klik untuk ganti ke DuckDuckGo)");
-        }
         if (ctx->engineAction) {
             ctx->engineAction->setIcon(QIcon(px));
             ctx->engineAction->setToolTip("Google Search aktif (Klik untuk ganti ke DuckDuckGo)");
         }
     } else {
         px.loadFromData(reinterpret_cast<const uchar*>(DDG_SVG), static_cast<uint>(strlen(DDG_SVG)), "SVG");
-        if (ctx->engineToggleBtn) {
-            ctx->engineToggleBtn->setIcon(QIcon(px));
-            ctx->engineToggleBtn->setIconSize(QSize(18, 18));
-            ctx->engineToggleBtn->setText("");
-            ctx->engineToggleBtn->setToolTip("DuckDuckGo aktif (Klik untuk ganti ke Google)");
-        }
         if (ctx->engineAction) {
             ctx->engineAction->setIcon(QIcon(px));
             ctx->engineAction->setToolTip("DuckDuckGo aktif (Klik untuk ganti ke Google)");
@@ -626,7 +606,7 @@ static QString generate_start_page_html(BrowserContext *ctx) {
 static QString generate_dialog_stylesheet(const QString &bg, const QString &fg, const QString &accent) {
     QColor bgCol(bg);
     bool isLight = bgCol.isValid() && bgCol.lightnessF() > 0.5;
-    QString inputBg = isLight ? "rgba(0, 0, 0, 0.04)" : "rgba(255, 255, 255, 0.05)";
+    QString inputBg = isLight ? "rgba(0, 0, 0, 0.04)" : "rgba(255, 255, 255, 0.06)";
     QString borderCol = isLight ? "rgba(0, 0, 0, 0.15)" : "rgba(255, 255, 255, 0.15)";
     QString btnBg = isLight ? "rgba(0, 0, 0, 0.07)" : "rgba(255, 255, 255, 0.08)";
     QString btnHover = isLight ? "rgba(0, 0, 0, 0.12)" : "rgba(255, 255, 255, 0.14)";
@@ -643,8 +623,8 @@ QLineEdit, QComboBox, QDoubleSpinBox {
     background-color: %4;
     color: %2;
     border: 1px solid %5;
-    border-radius: 4px;
-    padding: 5px 8px;
+    border-radius: 6px;
+    padding: 6px 10px;
 }
 QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus {
     border: 1px solid %3;
@@ -663,7 +643,7 @@ QPushButton {
     background-color: %6;
     color: %2;
     border: 1px solid %5;
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 6px 14px;
     min-width: 70px;
 }
@@ -678,12 +658,12 @@ QListWidget {
     background-color: %4;
     color: %2;
     border: 1px solid %5;
-    border-radius: 4px;
+    border-radius: 8px;
     padding: 4px;
 }
 QListWidget::item {
-    padding: 6px 8px;
-    border-radius: 4px;
+    padding: 7px 10px;
+    border-radius: 6px;
 }
 QListWidget::item:hover {
     background-color: %6;
@@ -706,7 +686,7 @@ static const char* STAR_FILLED_SVG =
     "</svg>";
 
 static bool is_url_bookmarked(const QString &url) {
-    if (url.isEmpty() || url == "falkon:home" || url == "about:blank") return false;
+    if (url.isEmpty() || url.startsWith("falkon:") || url.startsWith("about:")) return false;
     QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/bookmarks.json";
     QFile f(bmPath);
     if (!f.open(QIODevice::ReadOnly)) return false;
@@ -736,7 +716,7 @@ static void toggle_bookmark_current_page(BrowserContext *ctx) {
     QString url = curView->url().toString();
     QString title = curView->title();
     if (title.isEmpty()) title = url;
-    if (url.isEmpty() || url == "falkon:home" || url == "about:blank") return;
+    if (url.isEmpty() || url.startsWith("falkon:") || url.startsWith("about:")) return;
 
     QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/bookmarks.json";
     QFile f(bmPath);
@@ -771,16 +751,21 @@ static void toggle_bookmark_current_page(BrowserContext *ctx) {
     }
 
     update_bookmark_button(ctx, !found);
+    show_status_toast(ctx, found ? "Dihapus dari Bookmark" : "Disimpan ke Bookmark", 2000);
 }
 
 static void show_bookmarks_dialog(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
     QDialog dlg(ctx->window);
-    dlg.setWindowTitle("Bookmarks");
-    dlg.resize(480, 360);
+    dlg.setWindowTitle("Daftar Bookmark");
+    dlg.resize(520, 380);
     dlg.setStyleSheet(generate_dialog_stylesheet(ctx->bgColor, ctx->fgColor, ctx->accentColor));
 
     auto *layout = new QVBoxLayout(&dlg);
+    auto *searchBox = new QLineEdit(&dlg);
+    searchBox->setPlaceholderText("Cari judul atau URL bookmark...");
+    layout->addWidget(searchBox);
+
     auto *listWidget = new QListWidget(&dlg);
 
     QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/bookmarks.json";
@@ -800,11 +785,20 @@ static void show_bookmarks_dialog(BrowserContext *ctx) {
 
     layout->addWidget(listWidget);
 
+    QObject::connect(searchBox, &QLineEdit::textChanged, [listWidget](const QString &q) {
+        for (int i = 0; i < listWidget->count(); ++i) {
+            auto *it = listWidget->item(i);
+            it->setHidden(!q.isEmpty() && !it->text().contains(q, Qt::CaseInsensitive));
+        }
+    });
+
     auto *btnBox = new QHBoxLayout();
     auto *openBtn = new QPushButton("Buka", &dlg);
+    auto *newTabBtn = new QPushButton("Buka di Tab Baru", &dlg);
     auto *delBtn = new QPushButton("Hapus", &dlg);
     auto *closeBtn = new QPushButton("Tutup", &dlg);
     btnBox->addWidget(openBtn);
+    btnBox->addWidget(newTabBtn);
     btnBox->addWidget(delBtn);
     btnBox->addStretch();
     btnBox->addWidget(closeBtn);
@@ -821,6 +815,14 @@ static void show_bookmarks_dialog(BrowserContext *ctx) {
 
     QObject::connect(openBtn, &QPushButton::clicked, openCurrent);
     QObject::connect(listWidget, &QListWidget::itemDoubleClicked, openCurrent);
+    QObject::connect(newTabBtn, &QPushButton::clicked, [&]() {
+        auto *item = listWidget->currentItem();
+        if (item) {
+            QString url = item->data(Qt::UserRole).toString();
+            browser_add_tab(ctx, url.toUtf8().constData());
+            dlg.accept();
+        }
+    });
 
     QObject::connect(delBtn, &QPushButton::clicked, [&]() {
         int row = listWidget->currentRow();
@@ -853,10 +855,14 @@ static void show_history_dialog(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
     QDialog dlg(ctx->window);
     dlg.setWindowTitle("Riwayat Penjelajahan");
-    dlg.resize(540, 400);
+    dlg.resize(560, 420);
     dlg.setStyleSheet(generate_dialog_stylesheet(ctx->bgColor, ctx->fgColor, ctx->accentColor));
 
     auto *layout = new QVBoxLayout(&dlg);
+    auto *searchBox = new QLineEdit(&dlg);
+    searchBox->setPlaceholderText("Cari di riwayat penjelajahan...");
+    layout->addWidget(searchBox);
+
     auto *listWidget = new QListWidget(&dlg);
 
     QString histPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/history.json";
@@ -869,7 +875,12 @@ static void show_history_dialog(BrowserContext *ctx) {
                 QJsonObject obj = arr[i].toObject();
                 QString title = obj["title"].toString();
                 QString url = obj["url"].toString();
-                auto *item = new QListWidgetItem(QString("%1\n%2").arg(title.isEmpty() ? url : title, url), listWidget);
+                qint64 ts = static_cast<qint64>(obj["timestamp"].toDouble(0));
+                QString timeStr = ts > 0
+                    ? QDateTime::fromSecsSinceEpoch(ts).toString("dd MMM HH:mm")
+                    : "";
+                QString header = timeStr.isEmpty() ? (title.isEmpty() ? url : title) : QString("[%1] %2").arg(timeStr, title.isEmpty() ? url : title);
+                auto *item = new QListWidgetItem(QString("%1\n%2").arg(header, url), listWidget);
                 item->setData(Qt::UserRole, url);
             }
         }
@@ -877,11 +888,20 @@ static void show_history_dialog(BrowserContext *ctx) {
 
     layout->addWidget(listWidget);
 
+    QObject::connect(searchBox, &QLineEdit::textChanged, [listWidget](const QString &q) {
+        for (int i = 0; i < listWidget->count(); ++i) {
+            auto *it = listWidget->item(i);
+            it->setHidden(!q.isEmpty() && !it->text().contains(q, Qt::CaseInsensitive));
+        }
+    });
+
     auto *btnBox = new QHBoxLayout();
     auto *openBtn = new QPushButton("Buka", &dlg);
+    auto *newTabBtn = new QPushButton("Buka di Tab Baru", &dlg);
     auto *clearBtn = new QPushButton("Hapus Semua", &dlg);
     auto *closeBtn = new QPushButton("Tutup", &dlg);
     btnBox->addWidget(openBtn);
+    btnBox->addWidget(newTabBtn);
     btnBox->addWidget(clearBtn);
     btnBox->addStretch();
     btnBox->addWidget(closeBtn);
@@ -898,29 +918,57 @@ static void show_history_dialog(BrowserContext *ctx) {
 
     QObject::connect(openBtn, &QPushButton::clicked, openCurrent);
     QObject::connect(listWidget, &QListWidget::itemDoubleClicked, openCurrent);
+    QObject::connect(newTabBtn, &QPushButton::clicked, [&]() {
+        auto *item = listWidget->currentItem();
+        if (item) {
+            QString url = item->data(Qt::UserRole).toString();
+            browser_add_tab(ctx, url.toUtf8().constData());
+            dlg.accept();
+        }
+    });
 
     QObject::connect(clearBtn, &QPushButton::clicked, [&]() {
         listWidget->clear();
-        QFile wf(histPath);
-        if (wf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            wf.write("[]");
-        }
+        rust_clear_history();
+        show_status_toast(ctx, "Riwayat penjelajahan dibersihkan", 2000);
     });
 
     QObject::connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
     dlg.exec();
 }
 
-static void show_find_dialog(BrowserContext *ctx) {
-    if (!ctx || !ctx->window || !ctx->viewStack) return;
+static void toggle_find_bar(BrowserContext *ctx, bool show) {
+    if (!ctx || !ctx->findBar || !ctx->findInput) return;
+    if (show) {
+        ctx->findBar->show();
+        ctx->findInput->setFocus();
+        ctx->findInput->selectAll();
+    } else {
+        ctx->findBar->hide();
+        if (ctx->viewStack) {
+            auto *curView = qobject_cast<QWebEngineView*>(ctx->viewStack->currentWidget());
+            if (curView) curView->findText("");
+        }
+    }
+}
+
+static void trigger_find_text(BrowserContext *ctx, bool backward = false) {
+    if (!ctx || !ctx->viewStack || !ctx->findInput) return;
     auto *curView = qobject_cast<QWebEngineView*>(ctx->viewStack->currentWidget());
     if (!curView) return;
-
-    bool ok = false;
-    QString query = QInputDialog::getText(ctx->window, "Cari di Halaman", "Masukkan kata yang dicari:", QLineEdit::Normal, "", &ok);
-    if (ok && !query.isEmpty()) {
-        curView->findText(query);
+    QString query = ctx->findInput->text();
+    if (query.isEmpty()) {
+        curView->findText("");
+        if (ctx->findStatusLabel) ctx->findStatusLabel->setText("");
+        return;
     }
+    QWebEnginePage::FindFlags flags;
+    if (backward) flags |= QWebEnginePage::FindBackward;
+    curView->findText(query, flags, [ctx](const QWebEngineFindTextResult &res) {
+        if (ctx->findStatusLabel) {
+            ctx->findStatusLabel->setText(QString("%1 / %2").arg(res.activeMatch()).arg(res.numberOfMatches()));
+        }
+    });
 }
 
 static void open_downloads_folder(BrowserContext *ctx) {
@@ -933,6 +981,44 @@ static void open_downloads_folder(BrowserContext *ctx) {
     }
     QDir().mkpath(targetDir);
     QDesktopServices::openUrl(QUrl::fromLocalFile(targetDir));
+}
+
+static void show_downloads_dialog(BrowserContext *ctx) {
+    if (!ctx || !ctx->window) return;
+    QDialog dlg(ctx->window);
+    dlg.setWindowTitle(" Pengelola Unduhan");
+    dlg.resize(520, 340);
+    dlg.setStyleSheet(generate_dialog_stylesheet(ctx->bgColor, ctx->fgColor, ctx->accentColor));
+
+    auto *layout = new QVBoxLayout(&dlg);
+    auto *listWidget = new QListWidget(&dlg);
+
+    if (ctx->downloads.empty()) {
+        listWidget->addItem("Belum ada unduhan pada sesi ini.");
+    } else {
+        for (auto it = ctx->downloads.rbegin(); it != ctx->downloads.rend(); ++it) {
+            QString kb = it->totalBytes > 0
+                ? QString("%1 KB / %2 KB").arg(it->receivedBytes / 1024).arg(it->totalBytes / 1024)
+                : QString("%1 KB").arg(it->receivedBytes / 1024);
+            listWidget->addItem(QString("%1 — %2 (%3)").arg(it->fileName, it->stateText, kb));
+        }
+    }
+    layout->addWidget(listWidget);
+
+    auto *btnBox = new QHBoxLayout();
+    auto *folderBtn = new QPushButton("Buka Folder Unduhan", &dlg);
+    auto *closeBtn = new QPushButton("Tutup", &dlg);
+    btnBox->addWidget(folderBtn);
+    btnBox->addStretch();
+    btnBox->addWidget(closeBtn);
+    layout->addLayout(btnBox);
+
+    QObject::connect(folderBtn, &QPushButton::clicked, [&]() {
+        open_downloads_folder(ctx);
+        dlg.accept();
+    });
+    QObject::connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    dlg.exec();
 }
 
 static void save_browser_config(BrowserContext *ctx, const QString &homepage = "") {
@@ -956,12 +1042,16 @@ static void save_browser_config(BrowserContext *ctx, const QString &homepage = "
     }
     root["show_nav_buttons"] = (ctx->backBtn && ctx->backBtn->isVisible());
     root["show_adblock_badge"] = (ctx->adblockBadge && ctx->adblockBadge->isVisible());
-    root["show_new_tab_button"] = true;
+    root["show_new_tab_button"] = ctx->showNewTabButton;
     root["default_zoom"] = ctx->currentZoom;
     root["download_dir"] = ctx->downloadDir;
-    root["enable_adblock"] = true;
-    root["enable_cosmetic_filter"] = true;
-    root["user_agent"] = "";
+    root["enable_adblock"] = ctx->enableAdblock;
+    root["enable_cosmetic_filter"] = ctx->enableCosmeticFilter;
+    if (!ctx->customUserAgent.isEmpty()) {
+        root["user_agent"] = ctx->customUserAgent;
+    } else if (!root.contains("user_agent")) {
+        root["user_agent"] = "";
+    }
     root["bg_color"] = ctx->bgColor;
     root["surface_color"] = ctx->surfaceColor;
     root["fg_color"] = ctx->fgColor;
@@ -979,7 +1069,7 @@ static void save_browser_config(BrowserContext *ctx, const QString &homepage = "
 
     QFile wf(configPath);
     if (wf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        wf.write(QJsonDocument(root).toJson());
+        wf.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
         wf.close();
     }
 }
@@ -1026,7 +1116,7 @@ static QString generate_settings_page_html(BrowserContext *ctx) {
         ctx->showHomeClock,
         ctx->showHomeSearch,
         ctx->showHomeTiles,
-        ctx->customUserStyle.toUtf8().constData(),
+        ctx->customChromeQss.toUtf8().constData(),
         hp.toUtf8().constData()
     );
     if (!raw) return QString();
@@ -1035,18 +1125,26 @@ static QString generate_settings_page_html(BrowserContext *ctx) {
     return res;
 }
 
+static void open_settings_tab(BrowserContext *ctx);
+
 static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
     if (!ctx) return;
     QString action = url.host();
+    if (action.isEmpty()) {
+        action = url.path();
+        if (action.startsWith('/')) action = action.mid(1);
+    }
     QUrlQuery q(url);
 
-    if (action == "theme") {
+    if (action == "open_settings") {
+        open_settings_tab(ctx);
+    } else if (action == "theme") {
         QString val = q.queryItemValue("val");
         browser_set_theme(ctx, val.toUtf8().constData(), nullptr);
         save_browser_config(ctx);
         refresh_internal_tabs(ctx);
     } else if (action == "accent_color") {
-        QString val = q.queryItemValue("val").trimmed();
+        QString val = q.queryItemValue("val", QUrl::FullyDecoded).trimmed();
         if (!val.isEmpty()) {
             ctx->accentColor = val;
             apply_theme_qss(ctx);
@@ -1065,11 +1163,13 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         ctx->tabPosition = val;
         apply_theme_qss(ctx);
         save_browser_config(ctx);
+        refresh_internal_tabs(ctx);
     } else if (action == "ui_density") {
         QString val = q.queryItemValue("val");
         ctx->uiDensity = val;
         apply_theme_qss(ctx);
         save_browser_config(ctx);
+        refresh_internal_tabs(ctx);
     } else if (action == "home_toggle") {
         QString elem = q.queryItemValue("element");
         bool val = (q.queryItemValue("val") == "1");
@@ -1079,11 +1179,11 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         save_browser_config(ctx);
         refresh_internal_tabs(ctx);
     } else if (action == "tokens") {
-        QString bg = q.queryItemValue("bg").trimmed();
-        QString surface = q.queryItemValue("surface").trimmed();
-        QString fg = q.queryItemValue("fg").trimmed();
-        QString accent = q.queryItemValue("accent").trimmed();
-        QString border = q.queryItemValue("border").trimmed();
+        QString bg = q.queryItemValue("bg", QUrl::FullyDecoded).trimmed();
+        QString surface = q.queryItemValue("surface", QUrl::FullyDecoded).trimmed();
+        QString fg = q.queryItemValue("fg", QUrl::FullyDecoded).trimmed();
+        QString accent = q.queryItemValue("accent", QUrl::FullyDecoded).trimmed();
+        QString border = q.queryItemValue("border", QUrl::FullyDecoded).trimmed();
         if (!bg.isEmpty()) ctx->bgColor = bg;
         if (!surface.isEmpty()) ctx->surfaceColor = surface;
         if (!fg.isEmpty()) ctx->fgColor = fg;
@@ -1094,9 +1194,8 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         save_browser_config(ctx);
         refresh_internal_tabs(ctx);
     } else if (action == "custom_qss") {
-        QString raw = q.queryItemValue("qss");
-        QString qss = QUrl::fromPercentEncoding(raw.toUtf8());
-        ctx->customUserStyle = qss;
+        QString qss = q.queryItemValue("qss", QUrl::FullyDecoded);
+        ctx->customChromeQss = qss;
         QString userQssPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/user_chrome.qss";
         QFile f(userQssPath);
         if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -1105,63 +1204,44 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         }
         apply_theme_qss(ctx);
         save_browser_config(ctx);
-    } else if (action == "import_theme") {
-        QString bg = q.queryItemValue("bg").trimmed();
-        QString surface = q.queryItemValue("surface").trimmed();
-        QString fg = q.queryItemValue("fg").trimmed();
-        QString accent = q.queryItemValue("accent").trimmed();
-        QString border = q.queryItemValue("border").trimmed();
-        QString opStr = q.queryItemValue("opacity").trimmed();
-        QString density = q.queryItemValue("density").trimmed();
-        if (!bg.isEmpty()) ctx->bgColor = bg;
-        if (!surface.isEmpty()) ctx->surfaceColor = surface;
-        if (!fg.isEmpty()) ctx->fgColor = fg;
-        if (!accent.isEmpty()) ctx->accentColor = accent;
-        if (!border.isEmpty()) ctx->borderColor = border;
-        if (!opStr.isEmpty()) {
-            int op = opStr.toInt();
-            if (op >= 20 && op <= 100) ctx->bgOpacity = op / 100.0f;
-        }
-        if (!density.isEmpty()) ctx->uiDensity = density;
-        ctx->currentTheme = "custom";
-        apply_theme_qss(ctx);
-        save_browser_config(ctx);
-        refresh_internal_tabs(ctx);
-    } else if (action == "reset_defaults") {
+    } else if (action == "reset_defaults" || action == "reset") {
         ctx->currentTheme = "dark";
         ctx->bgColor = "#181825";
         ctx->surfaceColor = "#1e1e2e";
         ctx->fgColor = "#cdd6f4";
         ctx->accentColor = "#89b4fa";
         ctx->borderColor = "#313244";
-        ctx->bgOpacity = 0.85f;
+        ctx->bgOpacity = 0.88f;
         ctx->uiDensity = "comfortable";
         ctx->tabPosition = "top";
         ctx->showHomeClock = true;
         ctx->showHomeSearch = true;
         ctx->showHomeTiles = true;
-        ctx->customUserStyle = "";
+        ctx->customChromeQss = "";
         QString userQssPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/user_chrome.qss";
         QFile::remove(userQssPath);
         apply_theme_qss(ctx);
         save_browser_config(ctx);
         refresh_internal_tabs(ctx);
-    } else if (action == "tab_bar") {
-        bool show = (q.queryItemValue("val") == "top");
-        ctx->tabPosition = show ? "top" : "hidden";
-        apply_theme_qss(ctx);
-        save_browser_config(ctx);
-    } else if (action == "engine") {
+    } else if (action == "engine" || action == "search_engine") {
         QString val = q.queryItemValue("val");
         ctx->useGoogleSearch = (val == "google");
+        ctx->customSearchEngine.clear();
         update_search_engine_button(ctx);
         save_browser_config(ctx);
+        refresh_internal_tabs(ctx);
     } else if (action == "nav_buttons") {
         bool show = (q.queryItemValue("val") == "1");
         if (ctx->backBtn) ctx->backBtn->setVisible(show);
         if (ctx->forwardBtn) ctx->forwardBtn->setVisible(show);
         if (ctx->reloadBtn) ctx->reloadBtn->setVisible(show);
         save_browser_config(ctx);
+    } else if (action == "adblock_enable") {
+        bool en = (q.queryItemValue("val") == "1");
+        ctx->enableAdblock = en;
+        rust_set_adblock_enabled(en);
+        save_browser_config(ctx);
+        show_status_toast(ctx, en ? "uBlock Origin Diaktifkan" : "uBlock Origin Dinonaktifkan", 2000);
     } else if (action == "adblock_badge") {
         bool show = (q.queryItemValue("val") == "1");
         if (ctx->adblockBadge) ctx->adblockBadge->setVisible(show);
@@ -1170,44 +1250,52 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         float z = q.queryItemValue("val").toFloat();
         if (z >= 0.5f && z <= 3.0f) {
             ctx->currentZoom = z;
-            adjust_zoom(ctx, 0.0f);
+            if (ctx->viewStack) {
+                for (int i = 0; i < ctx->viewStack->count(); ++i) {
+                    auto *v = qobject_cast<QWebEngineView*>(ctx->viewStack->widget(i));
+                    if (v) v->setZoomFactor(z);
+                }
+            }
             save_browser_config(ctx);
         }
     } else if (action == "homepage") {
-        QString hp = q.queryItemValue("val").trimmed();
+        QString hp = q.queryItemValue("val", QUrl::FullyDecoded).trimmed();
         save_browser_config(ctx, hp);
+        show_status_toast(ctx, "Halaman beranda disimpan", 2000);
     } else if (action == "open_downloads") {
         open_downloads_folder(ctx);
-    } else if (action == "color") {
-        QString bg = q.queryItemValue("bg").trimmed();
-        QString fg = q.queryItemValue("fg").trimmed();
-        QString accent = q.queryItemValue("accent").trimmed();
-        if (!bg.isEmpty()) ctx->bgColor = bg;
-        if (!fg.isEmpty()) ctx->fgColor = fg;
-        if (!accent.isEmpty()) ctx->accentColor = accent;
-        ctx->currentTheme = "custom";
-        apply_theme_qss(ctx);
-        save_browser_config(ctx);
-        refresh_internal_tabs(ctx);
     } else if (action == "clear_history") {
-        QString histPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/history.json";
-        QFile wf(histPath);
-        if (wf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            wf.write("[]");
-        }
+        rust_clear_history();
+        show_status_toast(ctx, "Riwayat berhasil dihapus", 2000);
     } else if (action == "clear_cache") {
         QWebEngineProfile::defaultProfile()->clearHttpCache();
+        show_status_toast(ctx, "HTTP Cache berhasil dibersihkan", 2000);
     } else if (action == "smart_memory") {
         run_smart_memory_cleanup(ctx);
     }
 }
 
 bool BrowserPage::acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) {
-    if (url.scheme() == "falkon-set") {
+    if (url.scheme() == "falkon-set" || url.scheme() == "falkon-action") {
         handle_settings_action(m_ctx, url);
         return false;
     }
     return QWebEnginePage::acceptNavigationRequest(url, type, isMainFrame);
+}
+
+QWebEnginePage* BrowserPage::createWindow(WebWindowType type) {
+    (void)type;
+    if (!m_ctx) return nullptr;
+    bool currentPrivate = false;
+    int curIdx = m_ctx->tabBar ? m_ctx->tabBar->currentIndex() : -1;
+    if (curIdx >= 0 && curIdx < static_cast<int>(m_ctx->tabs.size())) {
+        currentPrivate = m_ctx->tabs[curIdx].isPrivate;
+    }
+    int idx = create_tab_internal(m_ctx, "about:blank", currentPrivate);
+    if (idx >= 0 && idx < static_cast<int>(m_ctx->tabs.size()) && m_ctx->tabs[idx].view) {
+        return m_ctx->tabs[idx].view->page();
+    }
+    return nullptr;
 }
 
 static void open_settings_tab(BrowserContext *ctx) {
@@ -1238,15 +1326,85 @@ static void show_settings_dialog(BrowserContext *ctx) {
     open_settings_tab(ctx);
 }
 
+static void restore_closed_tab(BrowserContext *ctx) {
+    if (!ctx || ctx->closedTabs.empty()) {
+        show_status_toast(ctx, "Tidak ada tab tertutup untuk dipulihkan", 1800);
+        return;
+    }
+    ClosedTabEntry last = ctx->closedTabs.back();
+    ctx->closedTabs.pop_back();
+    browser_add_tab(ctx, last.url.toUtf8().constData());
+    show_status_toast(ctx, QString("Tab dipulihkan: %1").arg(last.title), 2000);
+}
+
+static void show_status_toast(BrowserContext *ctx, const QString &msg, int timeoutMs) {
+    if (!ctx || !ctx->statusBarWidget || !ctx->statusToastLabel) return;
+    ctx->statusToastLabel->setText(msg);
+    ctx->statusBarWidget->show();
+    QTimer::singleShot(timeoutMs, ctx->statusBarWidget, [ctx, msg]() {
+        if (ctx->statusToastLabel && ctx->statusToastLabel->text() == msg) {
+            ctx->statusToastLabel->clear();
+            if (ctx->statusHoverLabel && ctx->statusHoverLabel->text().isEmpty()) {
+                ctx->statusBarWidget->hide();
+            }
+        }
+    });
+}
+
+static void setup_download_handler(BrowserContext *ctx, QWebEngineProfile *profile) {
+    QObject::connect(profile, &QWebEngineProfile::downloadRequested, [ctx](QWebEngineDownloadRequest *download) {
+        QString targetDir = ctx->downloadDir;
+        if (targetDir.isEmpty()) {
+            targetDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+            if (targetDir.isEmpty()) {
+                targetDir = QDir::homePath() + "/Downloads";
+            }
+        }
+        QDir().mkpath(targetDir);
+        download->setDownloadDirectory(targetDir);
+        download->accept();
+
+        DownloadItemMeta meta;
+        meta.fileName = download->downloadFileName();
+        meta.stateText = "Mengunduh...";
+        meta.receivedBytes = 0;
+        meta.totalBytes = download->totalBytes();
+        ctx->downloads.push_back(meta);
+        size_t dlIdx = ctx->downloads.size() - 1;
+
+        show_status_toast(ctx, QString("⬇️ Mengunduh: %1").arg(meta.fileName), 3000);
+
+        QObject::connect(download, &QWebEngineDownloadRequest::receivedBytesChanged, [ctx, download, dlIdx]() {
+            if (dlIdx < ctx->downloads.size()) {
+                ctx->downloads[dlIdx].receivedBytes = download->receivedBytes();
+                ctx->downloads[dlIdx].totalBytes = download->totalBytes();
+            }
+        });
+
+        QObject::connect(download, &QWebEngineDownloadRequest::stateChanged, [ctx, download, dlIdx](QWebEngineDownloadRequest::DownloadState state) {
+            if (dlIdx >= ctx->downloads.size()) return;
+            if (state == QWebEngineDownloadRequest::DownloadCompleted) {
+                ctx->downloads[dlIdx].stateText = "Selesai";
+                show_status_toast(ctx, QString("✅ Unduhan selesai: %1").arg(ctx->downloads[dlIdx].fileName), 4000);
+            } else if (state == QWebEngineDownloadRequest::DownloadInterrupted) {
+                ctx->downloads[dlIdx].stateText = "Gagal";
+                show_status_toast(ctx, QString("❌ Unduhan gagal: %1").arg(ctx->downloads[dlIdx].fileName), 4000);
+            } else if (state == QWebEngineDownloadRequest::DownloadCancelled) {
+                ctx->downloads[dlIdx].stateText = "Dibatalkan";
+            }
+        });
+    });
+}
+
 BrowserHandle browser_create(const char* title, int width, int height) {
     // 1. Ultra-Low RAM & Hardware Acceleration Optimization Flags
     qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
-        "--renderer-process-limit=1 "
+        "--renderer-process-limit=2 "
         "--enable-low-end-device-mode "
         "--disable-gpu-shader-disk-cache "
         "--disable-gpu-program-cache "
-        "--disk-cache-size=10485760 "
-        "--media-cache-size=10485760 "
+        "--disk-cache-size=20971520 "
+        "--media-cache-size=20971520 "
         "--disable-speech-api "
         "--disable-breakpad "
         "--enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL "
@@ -1269,7 +1427,6 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     ctx->window->setWindowTitle(QString::fromUtf8(title ? title : "Falkon-Rust"));
     ctx->window->resize(width > 0 ? width : 1280, height > 0 ? height : 800);
 
-    // Setup Persistent Cache & Memory Limit (10MB Cap)
     QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust";
     QDir().mkpath(configPath + "/cache");
     QDir().mkpath(configPath + "/storage");
@@ -1279,11 +1436,11 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     {
         QFile f(closeSvg);
         if (f.open(QIODevice::WriteOnly)) {
-            f.write("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><line x1=\"3\" y1=\"8\" x2=\"13\" y2=\"8\" stroke=\"#808499\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>");
+            f.write("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><line x1=\"4\" y1=\"4\" x2=\"12\" y2=\"12\" stroke=\"#808499\" stroke-width=\"1.8\" stroke-linecap=\"round\"/><line x1=\"12\" y1=\"4\" x2=\"4\" y2=\"12\" stroke=\"#808499\" stroke-width=\"1.8\" stroke-linecap=\"round\"/></svg>");
         }
         QFile f2(closeHoverSvg);
         if (f2.open(QIODevice::WriteOnly)) {
-            f2.write("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><line x1=\"3\" y1=\"8\" x2=\"13\" y2=\"8\" stroke=\"#ffffff\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>");
+            f2.write("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\"><line x1=\"4\" y1=\"4\" x2=\"12\" y2=\"12\" stroke=\"#ffffff\" stroke-width=\"2\" stroke-linecap=\"round\"/><line x1=\"12\" y1=\"4\" x2=\"4\" y2=\"12\" stroke=\"#ffffff\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>");
         }
     }
 
@@ -1300,14 +1457,20 @@ BrowserHandle browser_create(const char* title, int width, int height) {
             if (o.contains("fg_color")) ctx->fgColor = o["fg_color"].toString();
             if (o.contains("accent_color")) ctx->accentColor = o["accent_color"].toString();
             if (o.contains("border_color")) ctx->borderColor = o["border_color"].toString();
-            if (o.contains("bg_opacity")) ctx->bgOpacity = static_cast<float>(o["bg_opacity"].toDouble(0.85));
+            if (o.contains("bg_opacity")) ctx->bgOpacity = static_cast<float>(o["bg_opacity"].toDouble(0.88));
             if (o.contains("ui_density")) ctx->uiDensity = o["ui_density"].toString();
             if (o.contains("tab_position")) ctx->tabPosition = o["tab_position"].toString();
             if (o.contains("show_home_search")) ctx->showHomeSearch = o["show_home_search"].toBool(true);
             if (o.contains("show_home_tiles")) ctx->showHomeTiles = o["show_home_tiles"].toBool(true);
             if (o.contains("show_home_clock")) ctx->showHomeClock = o["show_home_clock"].toBool(true);
+            if (o.contains("show_new_tab_button")) ctx->showNewTabButton = o["show_new_tab_button"].toBool(true);
+            if (o.contains("enable_adblock")) ctx->enableAdblock = o["enable_adblock"].toBool(true);
+            if (o.contains("enable_cosmetic_filter")) ctx->enableCosmeticFilter = o["enable_cosmetic_filter"].toBool(true);
+            if (o.contains("user_agent")) ctx->customUserAgent = o["user_agent"].toString();
             if (o.contains("search_engine")) {
-                ctx->useGoogleSearch = o["search_engine"].toString().contains("google");
+                QString se = o["search_engine"].toString();
+                ctx->customSearchEngine = se;
+                ctx->useGoogleSearch = se.contains("google", Qt::CaseInsensitive);
             }
             if (o.contains("download_dir")) ctx->downloadDir = o["download_dir"].toString();
         }
@@ -1317,7 +1480,7 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     QString userQssPath = configPath + "/user_chrome.qss";
     QFile qssFile(userQssPath);
     if (qssFile.open(QIODevice::ReadOnly)) {
-        ctx->customUserStyle = QString::fromUtf8(qssFile.readAll());
+        ctx->customChromeQss = QString::fromUtf8(qssFile.readAll());
         qssFile.close();
     }
 
@@ -1326,64 +1489,63 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     profile->setPersistentStoragePath(configPath + "/storage");
     profile->setPersistentCookiesPolicy(QWebEngineProfile::AllowPersistentCookies);
     profile->setHttpCacheType(QWebEngineProfile::MemoryHttpCache);
-    profile->setHttpCacheMaximumSize(10 * 1024 * 1024); // 10MB memory cache cap
+    profile->setHttpCacheMaximumSize(20 * 1024 * 1024);
 
-    // WebEngine Performance & Audio/Video Settings
-    auto *settings = profile->settings();
-    settings->setAttribute(QWebEngineSettings::HyperlinkAuditingEnabled, false);
-    settings->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, true);
-    settings->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
-    settings->setAttribute(QWebEngineSettings::WebGLEnabled, true);
+    // Off-the-record profile for Private / Incognito tabs
+    ctx->privateProfile = new QWebEngineProfile(ctx->window);
+    ctx->privateProfile->setHttpCacheType(QWebEngineProfile::MemoryHttpCache);
+    ctx->privateProfile->setPersistentCookiesPolicy(QWebEngineProfile::NoPersistentCookies);
 
-    // Setup uBlock Request Interceptor
+    auto configureSettings = [](QWebEngineSettings *settings) {
+        settings->setAttribute(QWebEngineSettings::HyperlinkAuditingEnabled, false);
+        settings->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, true);
+        settings->setAttribute(QWebEngineSettings::Accelerated2dCanvasEnabled, true);
+        settings->setAttribute(QWebEngineSettings::WebGLEnabled, true);
+        settings->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
+        settings->setAttribute(QWebEngineSettings::ScrollAnimatorEnabled, true);
+    };
+    configureSettings(profile->settings());
+    configureSettings(ctx->privateProfile->settings());
+
     ctx->interceptor = new BridgeInterceptor(ctx->window);
     profile->setUrlRequestInterceptor(ctx->interceptor);
+    ctx->privateProfile->setUrlRequestInterceptor(ctx->interceptor);
 
-    // Setup Automatic Downloads handling
-    QObject::connect(profile, &QWebEngineProfile::downloadRequested, [ctx](QWebEngineDownloadRequest *download) {
-        QString targetDir = ctx->downloadDir;
-        if (targetDir.isEmpty()) {
-            targetDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-            if (targetDir.isEmpty()) {
-                targetDir = QDir::homePath() + "/Downloads";
-            }
-        }
-        QDir().mkpath(targetDir);
-        download->setDownloadDirectory(targetDir);
-        download->accept();
-    });
+    setup_download_handler(ctx, profile);
+    setup_download_handler(ctx, ctx->privateProfile);
 
     // Main layout
     auto *centralWidget = new QWidget(ctx->window);
-    auto *mainLayout = new QVBoxLayout(centralWidget);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
+    ctx->mainLayout = new QVBoxLayout(centralWidget);
+    ctx->mainLayout->setContentsMargins(0, 0, 0, 0);
+    ctx->mainLayout->setSpacing(0);
 
-    // 1. Top Tab Bar Row (Tabs + New Tab Button + Spacer)
-    auto *tabRowWidget = new QWidget(centralWidget);
-    tabRowWidget->setObjectName("tabStrip");
-    auto *tabRowLayout = new QHBoxLayout(tabRowWidget);
-    tabRowLayout->setContentsMargins(14, 10, 14, 0);
+    // 1. Tab Bar Row
+    ctx->tabRowWidget = new QWidget(centralWidget);
+    ctx->tabRowWidget->setObjectName("tabStrip");
+    auto *tabRowLayout = new QHBoxLayout(ctx->tabRowWidget);
+    tabRowLayout->setContentsMargins(12, 8, 12, 0);
     tabRowLayout->setSpacing(6);
 
-    ctx->tabBar = new QTabBar(tabRowWidget);
+    ctx->tabBar = new QTabBar(ctx->tabRowWidget);
     ctx->tabBar->setTabsClosable(true);
     ctx->tabBar->setMovable(true);
     ctx->tabBar->setExpanding(false);
     ctx->tabBar->setElideMode(Qt::ElideRight);
+    ctx->tabBar->setContextMenuPolicy(Qt::CustomContextMenu);
 
-    ctx->newTabBtn = new QPushButton("+", tabRowWidget);
+    ctx->newTabBtn = new QPushButton("+", ctx->tabRowWidget);
     ctx->newTabBtn->setObjectName("newTabBtn");
     ctx->newTabBtn->setFixedSize(32, 32);
-    ctx->newTabBtn->setToolTip("New Tab (Ctrl+T)");
+    ctx->newTabBtn->setToolTip("Tab Baru (Ctrl+T)");
     ctx->newTabBtn->setCursor(Qt::PointingHandCursor);
 
     tabRowLayout->addWidget(ctx->tabBar);
     tabRowLayout->addWidget(ctx->newTabBtn);
     tabRowLayout->addStretch();
 
-    // 1.1 Window Control Buttons (Minimize, Windowed/Maximize, Close)
-    auto *winCtrlWidget = new QWidget(tabRowWidget);
+    // Window Control Buttons
+    auto *winCtrlWidget = new QWidget(ctx->tabRowWidget);
     winCtrlWidget->setObjectName("winControls");
     auto *winCtrlLayout = new QHBoxLayout(winCtrlWidget);
     winCtrlLayout->setContentsMargins(0, 0, 0, 0);
@@ -1393,115 +1555,124 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     ctx->winMinBtn->setObjectName("winMinBtn");
     ctx->winMinBtn->setFixedSize(32, 28);
     ctx->winMinBtn->setToolTip("Minimize");
-    ctx->winMinBtn->setCursor(Qt::PointingHandCursor);
 
     ctx->winMaxBtn = new QPushButton("□", winCtrlWidget);
     ctx->winMaxBtn->setObjectName("winMaxBtn");
     ctx->winMaxBtn->setFixedSize(32, 28);
-    ctx->winMaxBtn->setToolTip("Maximize / Windowed");
-    ctx->winMaxBtn->setCursor(Qt::PointingHandCursor);
+    ctx->winMaxBtn->setToolTip("Maximize / Restore");
 
     ctx->winCloseBtn = new QPushButton("✕", winCtrlWidget);
     ctx->winCloseBtn->setObjectName("winCloseBtn");
     ctx->winCloseBtn->setFixedSize(32, 28);
-    ctx->winCloseBtn->setToolTip("Close");
-    ctx->winCloseBtn->setCursor(Qt::PointingHandCursor);
+    ctx->winCloseBtn->setToolTip("Tutup");
 
     winCtrlLayout->addWidget(ctx->winMinBtn);
     winCtrlLayout->addWidget(ctx->winMaxBtn);
     winCtrlLayout->addWidget(ctx->winCloseBtn);
     tabRowLayout->addWidget(winCtrlWidget);
 
-    QObject::connect(ctx->winMinBtn, &QPushButton::clicked, [ctx]() {
-        ctx->window->showMinimized();
-    });
-
+    QObject::connect(ctx->winMinBtn, &QPushButton::clicked, [ctx]() { ctx->window->showMinimized(); });
     QObject::connect(ctx->winMaxBtn, &QPushButton::clicked, [ctx]() {
         if (ctx->window->isMaximized()) {
             ctx->window->showNormal();
             ctx->winMaxBtn->setText("□");
-            ctx->winMaxBtn->setToolTip("Maximize");
         } else {
             ctx->window->showMaximized();
             ctx->winMaxBtn->setText("❐");
-            ctx->winMaxBtn->setToolTip("Restore / Windowed");
         }
     });
+    QObject::connect(ctx->winCloseBtn, &QPushButton::clicked, [ctx]() { ctx->window->close(); });
 
-    QObject::connect(ctx->winCloseBtn, &QPushButton::clicked, [ctx]() {
-        ctx->window->close();
-    });
+    // Tab Context Menu (Right-click on tab)
+    QObject::connect(ctx->tabBar, &QTabBar::customContextMenuRequested, [ctx](const QPoint &pos) {
+        int tabIdx = ctx->tabBar->tabAt(pos);
+        if (tabIdx < 0 || tabIdx >= static_cast<int>(ctx->tabs.size())) return;
 
-    class WindowStateFilter : public QObject {
-        BrowserContext *m_ctx;
-    public:
-        WindowStateFilter(BrowserContext *ctx, QObject *parent = nullptr)
-            : QObject(parent), m_ctx(ctx) {}
-    protected:
-        bool eventFilter(QObject *obj, QEvent *ev) override {
-            if (ev->type() == QEvent::WindowStateChange && m_ctx && m_ctx->winMaxBtn) {
-                bool max = m_ctx->window->isMaximized();
-                m_ctx->winMaxBtn->setText(max ? "❐" : "□");
-                m_ctx->winMaxBtn->setToolTip(max ? "Restore / Windowed" : "Maximize");
-            } else if (ev->type() == QEvent::MouseButtonDblClick && obj != m_ctx->window) {
-                auto *me = static_cast<QMouseEvent*>(ev);
-                if (me->button() == Qt::LeftButton) {
-                    if (m_ctx->window->isMaximized()) {
-                        m_ctx->window->showNormal();
-                    } else {
-                        m_ctx->window->showMaximized();
-                    }
-                    return true;
-                }
+        QMenu tabMenu(ctx->window);
+        auto *actReload = tabMenu.addAction("Muat Ulang Tab");
+        auto *actDuplicate = tabMenu.addAction("Duplikat Tab");
+        auto *actSuspend = tabMenu.addAction("Suspensi Tab (Hemat RAM)");
+        tabMenu.addSeparator();
+        auto *actCloseOthers = tabMenu.addAction("Tutup Tab Lainnya");
+        auto *actClose = tabMenu.addAction("Tutup Tab");
+
+        QAction *chosen = tabMenu.exec(ctx->tabBar->mapToGlobal(pos));
+        if (!chosen) return;
+
+        if (chosen == actReload) {
+            if (ctx->tabs[tabIdx].view) ctx->tabs[tabIdx].view->reload();
+        } else if (chosen == actDuplicate) {
+            QString u = ctx->tabs[tabIdx].savedUrl;
+            create_tab_internal(ctx, u.toUtf8().constData(), ctx->tabs[tabIdx].isPrivate);
+        } else if (chosen == actSuspend) {
+            if (tabIdx != ctx->tabBar->currentIndex() && !ctx->tabs[tabIdx].isSuspended && ctx->tabs[tabIdx].view) {
+                ctx->tabs[tabIdx].savedUrl = ctx->tabs[tabIdx].view->url().toString();
+                ctx->tabs[tabIdx].savedTitle = ctx->tabBar->tabText(tabIdx);
+                ctx->tabs[tabIdx].isSuspended = true;
+                ctx->tabs[tabIdx].view->load(QUrl("about:blank"));
+                ctx->tabBar->setTabText(tabIdx, "💤 " + ctx->tabs[tabIdx].savedTitle);
             }
-            return QObject::eventFilter(obj, ev);
+        } else if (chosen == actCloseOthers) {
+            for (int i = ctx->tabBar->count() - 1; i >= 0; --i) {
+                if (i != tabIdx) browser_close_tab(ctx, i);
+            }
+        } else if (chosen == actClose) {
+            browser_close_tab(ctx, tabIdx);
         }
-    };
-    auto *stateFilter = new WindowStateFilter(ctx, ctx->window);
-    ctx->window->installEventFilter(stateFilter);
-    tabRowWidget->installEventFilter(stateFilter);
+    });
 
     // 2. Navigation Bar
     ctx->navBar = new QWidget(centralWidget);
     ctx->navBar->setObjectName("navBar");
     auto *navLayout = new QHBoxLayout(ctx->navBar);
-    navLayout->setContentsMargins(14, 8, 14, 8);
-    navLayout->setSpacing(10);
+    navLayout->setContentsMargins(12, 7, 12, 7);
+    navLayout->setSpacing(8);
 
     ctx->backBtn = new QPushButton("←", ctx->navBar);
     ctx->backBtn->setObjectName("iconBtn");
-    ctx->backBtn->setFixedSize(36, 36);
-    ctx->backBtn->setToolTip("Back (Alt+Left)");
+    ctx->backBtn->setFixedSize(34, 34);
+    ctx->backBtn->setToolTip("Kembali (Alt+Left)");
 
     ctx->forwardBtn = new QPushButton("→", ctx->navBar);
     ctx->forwardBtn->setObjectName("iconBtn");
-    ctx->forwardBtn->setFixedSize(36, 36);
-    ctx->forwardBtn->setToolTip("Forward (Alt+Right)");
+    ctx->forwardBtn->setFixedSize(34, 34);
+    ctx->forwardBtn->setToolTip("Maju (Alt+Right)");
 
     ctx->reloadBtn = new QPushButton("↻", ctx->navBar);
     ctx->reloadBtn->setObjectName("iconBtn");
-    ctx->reloadBtn->setFixedSize(36, 36);
-    ctx->reloadBtn->setToolTip("Reload (Ctrl+R / F5)");
+    ctx->reloadBtn->setFixedSize(34, 34);
+    ctx->reloadBtn->setToolTip("Muat Ulang (Ctrl+R / F5)");
 
     ctx->urlBar = new QLineEdit(ctx->navBar);
     ctx->urlBar->setObjectName("urlBar");
-    ctx->urlBar->setMinimumHeight(42);
-    ctx->urlBar->setPlaceholderText("Search Google or type a URL... (Ctrl+L)");
+    ctx->urlBar->setMinimumHeight(38);
+    ctx->urlBar->setPlaceholderText("Cari di Google atau ketik alamat URL... (Ctrl+L)");
 
-    // Search Engine Icon inside URL Bar (Leading)
+    // Leading Actions inside URL Bar: Engine Toggle + HTTPS Security Lock
     ctx->engineAction = ctx->urlBar->addAction(QIcon(), QLineEdit::LeadingPosition);
     update_search_engine_button(ctx);
     QObject::connect(ctx->engineAction, &QAction::triggered, [ctx]() {
         ctx->useGoogleSearch = !ctx->useGoogleSearch;
+        ctx->customSearchEngine.clear();
         update_search_engine_button(ctx);
+        update_url_bar_for_current_tab(ctx);
+        refresh_internal_tabs(ctx);
+        save_browser_config(ctx);
     });
 
-    // Bookmark Star Action inside URL Bar (Trailing)
+    ctx->securityAction = ctx->urlBar->addAction(QIcon(), QLineEdit::LeadingPosition);
+    update_security_indicator(ctx, "falkon:home");
+
+    // Trailing Action inside URL Bar: Bookmark Star
     ctx->bookmarkAction = ctx->urlBar->addAction(QIcon(), QLineEdit::TrailingPosition);
     update_bookmark_button(ctx, false);
     QObject::connect(ctx->bookmarkAction, &QAction::triggered, [ctx]() {
         toggle_bookmark_current_page(ctx);
     });
+
+    ctx->privateBadge = new QLabel("🕶️ Private", ctx->navBar);
+    ctx->privateBadge->setObjectName("privateBadge");
+    ctx->privateBadge->hide();
 
     ctx->adblockBadge = new QLabel("🛡️ uBlock: 0", ctx->navBar);
     ctx->adblockBadge->setObjectName("adblockBadge");
@@ -1509,26 +1680,28 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     // Quick Menu Button
     ctx->menuBtn = new QPushButton("⋮", ctx->navBar);
     ctx->menuBtn->setObjectName("iconBtn");
-    ctx->menuBtn->setFixedSize(36, 36);
+    ctx->menuBtn->setFixedSize(34, 34);
     ctx->menuBtn->setToolTip("Menu & Pengaturan (Ctrl+,)");
 
     auto *menu = new QMenu(ctx->menuBtn);
-
     auto *actionNewTab = menu->addAction("Tab Baru");
     actionNewTab->setShortcut(QKeySequence("Ctrl+T"));
 
-    auto *actionNewPrivate = menu->addAction("Jendela Penyamaran Baru");
+    auto *actionNewPrivate = menu->addAction("Tab Penyamaran Baru (Private)");
     actionNewPrivate->setShortcut(QKeySequence("Ctrl+Shift+N"));
+
+    auto *actionRestoreTab = menu->addAction("Pulihkan Tab Tertutup");
+    actionRestoreTab->setShortcut(QKeySequence("Ctrl+Shift+T"));
 
     menu->addSeparator();
 
-    auto *actionBookmarks = menu->addAction("Bookmarks");
+    auto *actionBookmarks = menu->addAction("Daftar Bookmark");
     actionBookmarks->setShortcut(QKeySequence("Ctrl+B"));
 
-    auto *actionHistory = menu->addAction("Riwayat");
+    auto *actionHistory = menu->addAction("Riwayat Penjelajahan");
     actionHistory->setShortcut(QKeySequence("Ctrl+H"));
 
-    auto *actionDownloads = menu->addAction("Unduhan");
+    auto *actionDownloads = menu->addAction("Pengelola Unduhan");
     actionDownloads->setShortcut(QKeySequence("Ctrl+J"));
 
     menu->addSeparator();
@@ -1540,8 +1713,8 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     auto *zoomWidgetAction = new QWidgetAction(menu);
     auto *zoomWidget = new QWidget(menu);
     auto *zoomLayout = new QHBoxLayout(zoomWidget);
-    zoomLayout->setContentsMargins(18, 4, 18, 4);
-    zoomLayout->setSpacing(10);
+    zoomLayout->setContentsMargins(16, 4, 16, 4);
+    zoomLayout->setSpacing(8);
 
     auto *zoomLabel = new QLabel("Zoom", zoomWidget);
     auto *zoomOutBtn = new QPushButton("－", zoomWidget);
@@ -1553,41 +1726,40 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     auto *zoomInBtn = new QPushButton("＋", zoomWidget);
     zoomInBtn->setObjectName("iconBtn");
     zoomInBtn->setFixedSize(28, 28);
-    auto *zoomResetBtn = new QPushButton("⛶", zoomWidget);
-    zoomResetBtn->setObjectName("iconBtn");
-    zoomResetBtn->setFixedSize(28, 28);
-    zoomResetBtn->setToolTip("Layar Penuh (F11)");
+    auto *zoomFullBtn = new QPushButton("⛶", zoomWidget);
+    zoomFullBtn->setObjectName("iconBtn");
+    zoomFullBtn->setFixedSize(28, 28);
+    zoomFullBtn->setToolTip("Layar Penuh (F11)");
 
     zoomLayout->addWidget(zoomLabel);
     zoomLayout->addStretch();
     zoomLayout->addWidget(zoomOutBtn);
     zoomLayout->addWidget(zoomValLabel);
     zoomLayout->addWidget(zoomInBtn);
-    zoomLayout->addWidget(zoomResetBtn);
+    zoomLayout->addWidget(zoomFullBtn);
     zoomWidgetAction->setDefaultWidget(zoomWidget);
     menu->addAction(zoomWidgetAction);
 
     menu->addSeparator();
 
-    // Submenu "Alat Lainnya"
     auto *moreMenu = menu->addMenu("Alat Lainnya");
     auto *actionEngine = moreMenu->addAction("Ganti Mesin Pencari (Google / DDG)");
     auto *actionTabHide = moreMenu->addAction("Sembunyikan / Tampilkan Tab Bar");
-    auto *actionCleanMem = moreMenu->addAction("Bersihkan Memori Tab Tidak Aktif");
-    auto *actionFullscreen = moreMenu->addAction("Layar Penuh");
-    actionFullscreen->setShortcut(QKeySequence("F11"));
+    auto *actionCleanMem = moreMenu->addAction("Optimalkan Memori Tab Tidak Aktif");
+    auto *actionFullscreen = moreMenu->addAction("Layar Penuh (F11)");
 
     menu->addSeparator();
 
-    auto *actionSettings = menu->addAction("Pengaturan");
+    auto *actionSettings = menu->addAction("Pengaturan Browser");
     actionSettings->setShortcut(QKeySequence("Ctrl+,"));
 
     QObject::connect(actionNewTab, &QAction::triggered, [ctx]() { browser_add_tab(ctx, ""); });
-    QObject::connect(actionNewPrivate, &QAction::triggered, [ctx]() { browser_add_tab(ctx, ""); });
+    QObject::connect(actionNewPrivate, &QAction::triggered, [ctx]() { browser_add_private_tab(ctx, ""); });
+    QObject::connect(actionRestoreTab, &QAction::triggered, [ctx]() { restore_closed_tab(ctx); });
     QObject::connect(actionBookmarks, &QAction::triggered, [ctx]() { show_bookmarks_dialog(ctx); });
     QObject::connect(actionHistory, &QAction::triggered, [ctx]() { show_history_dialog(ctx); });
-    QObject::connect(actionDownloads, &QAction::triggered, [ctx]() { open_downloads_folder(ctx); });
-    QObject::connect(actionFind, &QAction::triggered, [ctx]() { show_find_dialog(ctx); });
+    QObject::connect(actionDownloads, &QAction::triggered, [ctx]() { show_downloads_dialog(ctx); });
+    QObject::connect(actionFind, &QAction::triggered, [ctx]() { toggle_find_bar(ctx, true); });
     QObject::connect(actionSettings, &QAction::triggered, [ctx]() { show_settings_dialog(ctx); });
 
     auto updateZoomDisplay = [ctx, zoomValLabel]() {
@@ -1601,7 +1773,7 @@ BrowserHandle browser_create(const char* title, int width, int height) {
         adjust_zoom(ctx, 0.1f);
         updateZoomDisplay();
     });
-    QObject::connect(zoomResetBtn, &QPushButton::clicked, [ctx, menu]() {
+    QObject::connect(zoomFullBtn, &QPushButton::clicked, [ctx, menu]() {
         if (ctx->window->isFullScreen()) ctx->window->showNormal();
         else ctx->window->showFullScreen();
         menu->close();
@@ -1609,11 +1781,13 @@ BrowserHandle browser_create(const char* title, int width, int height) {
 
     QObject::connect(actionEngine, &QAction::triggered, [ctx]() {
         ctx->useGoogleSearch = !ctx->useGoogleSearch;
+        ctx->customSearchEngine.clear();
         update_search_engine_button(ctx);
+        refresh_internal_tabs(ctx);
     });
     QObject::connect(actionTabHide, &QAction::triggered, [ctx]() {
-        ctx->tabBar->setVisible(!ctx->tabBar->isVisible());
-        ctx->newTabBtn->setVisible(ctx->tabBar->isVisible());
+        ctx->tabPosition = (ctx->tabPosition == "hidden") ? "top" : "hidden";
+        update_tab_bar_placement(ctx);
     });
     QObject::connect(actionCleanMem, &QAction::triggered, [ctx]() {
         run_smart_memory_cleanup(ctx);
@@ -1623,37 +1797,91 @@ BrowserHandle browser_create(const char* title, int width, int height) {
         else ctx->window->showFullScreen();
     });
 
-    QObject::connect(ctx->menuBtn, &QPushButton::clicked, [ctx, menu]() {
+    QObject::connect(ctx->menuBtn, &QPushButton::clicked, [ctx, menu, updateZoomDisplay]() {
+        updateZoomDisplay();
         menu->exec(ctx->menuBtn->mapToGlobal(QPoint(0, ctx->menuBtn->height() + 4)));
     });
-
-    // Window shortcuts
-    ctx->window->addAction(actionNewTab);
-    ctx->window->addAction(actionBookmarks);
-    ctx->window->addAction(actionHistory);
-    ctx->window->addAction(actionDownloads);
-    ctx->window->addAction(actionFind);
-    ctx->window->addAction(actionSettings);
-
-    auto *actionBookmarkShortcut = new QAction(ctx->window);
-    actionBookmarkShortcut->setShortcut(QKeySequence("Ctrl+D"));
-    QObject::connect(actionBookmarkShortcut, &QAction::triggered, [ctx]() { toggle_bookmark_current_page(ctx); });
-    ctx->window->addAction(actionBookmarkShortcut);
 
     navLayout->addWidget(ctx->backBtn);
     navLayout->addWidget(ctx->forwardBtn);
     navLayout->addWidget(ctx->reloadBtn);
-    navLayout->addWidget(ctx->urlBar);
+    navLayout->addWidget(ctx->urlBar, 1);
+    navLayout->addWidget(ctx->privateBadge);
     navLayout->addWidget(ctx->adblockBadge);
-    navLayout->addSpacing(8);
     navLayout->addWidget(ctx->menuBtn);
+
+    // 2.1 Thin Load Progress Bar
+    ctx->loadProgressBar = new QProgressBar(centralWidget);
+    ctx->loadProgressBar->setObjectName("loadProgress");
+    ctx->loadProgressBar->setTextVisible(false);
+    ctx->loadProgressBar->setRange(0, 100);
+    ctx->loadProgressBar->setFixedHeight(2);
+    ctx->loadProgressBar->hide();
 
     // 3. Web Views Stack
     ctx->viewStack = new QStackedWidget(centralWidget);
 
-    mainLayout->addWidget(tabRowWidget);
-    mainLayout->addWidget(ctx->navBar);
-    mainLayout->addWidget(ctx->viewStack, 1);
+    // 4. Inline Find-in-Page Bar (Bottom)
+    ctx->findBar = new QWidget(centralWidget);
+    ctx->findBar->setObjectName("findBar");
+    auto *findLayout = new QHBoxLayout(ctx->findBar);
+    findLayout->setContentsMargins(14, 6, 14, 6);
+    findLayout->setSpacing(8);
+
+    auto *findTitle = new QLabel("Cari:", ctx->findBar);
+    ctx->findInput = new QLineEdit(ctx->findBar);
+    ctx->findInput->setObjectName("findInput");
+    ctx->findInput->setPlaceholderText("Ketik teks yang dicari di halaman...");
+    ctx->findInput->setMaximumWidth(320);
+
+    auto *findPrevBtn = new QPushButton("▲", ctx->findBar);
+    findPrevBtn->setObjectName("iconBtn");
+    findPrevBtn->setFixedSize(28, 28);
+    findPrevBtn->setToolTip("Sebelumnya (Shift+Enter)");
+
+    auto *findNextBtn = new QPushButton("▼", ctx->findBar);
+    findNextBtn->setObjectName("iconBtn");
+    findNextBtn->setFixedSize(28, 28);
+    findNextBtn->setToolTip("Berikutnya (Enter)");
+
+    ctx->findStatusLabel = new QLabel("", ctx->findBar);
+    auto *findCloseBtn = new QPushButton("✕", ctx->findBar);
+    findCloseBtn->setObjectName("iconBtn");
+    findCloseBtn->setFixedSize(28, 28);
+    findCloseBtn->setToolTip("Tutup (Esc)");
+
+    findLayout->addWidget(findTitle);
+    findLayout->addWidget(ctx->findInput);
+    findLayout->addWidget(findPrevBtn);
+    findLayout->addWidget(findNextBtn);
+    findLayout->addWidget(ctx->findStatusLabel);
+    findLayout->addStretch();
+    findLayout->addWidget(findCloseBtn);
+    ctx->findBar->hide();
+
+    QObject::connect(ctx->findInput, &QLineEdit::textChanged, [ctx]() { trigger_find_text(ctx, false); });
+    QObject::connect(ctx->findInput, &QLineEdit::returnPressed, [ctx]() { trigger_find_text(ctx, false); });
+    QObject::connect(findNextBtn, &QPushButton::clicked, [ctx]() { trigger_find_text(ctx, false); });
+    QObject::connect(findPrevBtn, &QPushButton::clicked, [ctx]() { trigger_find_text(ctx, true); });
+    QObject::connect(findCloseBtn, &QPushButton::clicked, [ctx]() { toggle_find_bar(ctx, false); });
+
+    // 5. Status / Hover URL & Toast Bar
+    ctx->statusBarWidget = new QWidget(centralWidget);
+    ctx->statusBarWidget->setObjectName("statusBarWidget");
+    auto *statusLayout = new QHBoxLayout(ctx->statusBarWidget);
+    statusLayout->setContentsMargins(12, 3, 12, 3);
+    ctx->statusHoverLabel = new QLabel("", ctx->statusBarWidget);
+    ctx->statusToastLabel = new QLabel("", ctx->statusBarWidget);
+    statusLayout->addWidget(ctx->statusHoverLabel, 1);
+    statusLayout->addWidget(ctx->statusToastLabel);
+    ctx->statusBarWidget->hide();
+
+    ctx->mainLayout->addWidget(ctx->tabRowWidget);
+    ctx->mainLayout->addWidget(ctx->navBar);
+    ctx->mainLayout->addWidget(ctx->loadProgressBar);
+    ctx->mainLayout->addWidget(ctx->viewStack, 1);
+    ctx->mainLayout->addWidget(ctx->findBar);
+    ctx->mainLayout->addWidget(ctx->statusBarWidget);
     ctx->window->setCentralWidget(centralWidget);
 
     // Tab Bar Event Connections
@@ -1665,16 +1893,21 @@ BrowserHandle browser_create(const char* title, int width, int height) {
             } else if (from > to) {
                 std::rotate(ctx->tabs.begin() + to, ctx->tabs.begin() + from, ctx->tabs.begin() + from + 1);
             }
+            if (ctx->tabMoveCallback) {
+                ctx->tabMoveCallback(from, to);
+            }
         }
     });
 
     QObject::connect(ctx->tabBar, &QTabBar::currentChanged, [ctx](int index) {
         if (index >= 0 && index < static_cast<int>(ctx->tabs.size())) {
-            ctx->viewStack->setCurrentIndex(index);
+            if (ctx->tabs[index].view) {
+                ctx->viewStack->setCurrentWidget(ctx->tabs[index].view);
+            }
             auto &meta = ctx->tabs[index];
             meta.lastActive = QDateTime::currentSecsSinceEpoch();
 
-            if (meta.isSuspended) {
+            if (meta.isSuspended && meta.view) {
                 meta.isSuspended = false;
                 if (!meta.savedUrl.isEmpty()) {
                     if (meta.savedUrl == "falkon:settings") {
@@ -1716,10 +1949,24 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     // Keyboard Shortcuts
     new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma), ctx->window, [ctx]() { show_settings_dialog(ctx); });
     new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_T), ctx->window, [ctx]() { browser_add_tab(ctx, ""); });
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N), ctx->window, [ctx]() { browser_add_private_tab(ctx, ""); });
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_T), ctx->window, [ctx]() { restore_closed_tab(ctx); });
     new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), ctx->window, [ctx]() { browser_close_tab(ctx, ctx->tabBar->currentIndex()); });
     new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), ctx->window, [ctx]() { browser_reload(ctx); });
     new QShortcut(QKeySequence(Qt::Key_F5), ctx->window, [ctx]() { browser_reload(ctx); });
     new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_L), ctx->window, [ctx]() { ctx->urlBar->setFocus(); ctx->urlBar->selectAll(); });
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_F), ctx->window, [ctx]() { toggle_find_bar(ctx, true); });
+    new QShortcut(QKeySequence(Qt::Key_Escape), ctx->window, [ctx]() {
+        if (ctx->findBar && ctx->findBar->isVisible()) {
+            toggle_find_bar(ctx, false);
+        } else if (ctx->window && ctx->window->isFullScreen()) {
+            ctx->window->showNormal();
+        }
+    });
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), ctx->window, [ctx]() { toggle_bookmark_current_page(ctx); });
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_B), ctx->window, [ctx]() { show_bookmarks_dialog(ctx); });
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_H), ctx->window, [ctx]() { show_history_dialog(ctx); });
+    new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_J), ctx->window, [ctx]() { show_downloads_dialog(ctx); });
     new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Left), ctx->window, [ctx]() { browser_back(ctx); });
     new QShortcut(QKeySequence(Qt::ALT | Qt::Key_Right), ctx->window, [ctx]() { browser_forward(ctx); });
 
@@ -1729,7 +1976,11 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Minus), ctx->window, [ctx]() { adjust_zoom(ctx, -0.1f); });
     new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_0), ctx->window, [ctx]() {
         auto *view = qobject_cast<QWebEngineView*>(ctx->viewStack->currentWidget());
-        if (view) { ctx->currentZoom = 1.0f; view->setZoomFactor(1.0f); }
+        if (view) {
+            ctx->currentZoom = 1.0f;
+            view->setZoomFactor(1.0f);
+            show_status_toast(ctx, "Zoom: 100%", 1500);
+        }
     });
 
     // Fullscreen shortcut
@@ -1738,13 +1989,13 @@ BrowserHandle browser_create(const char* title, int width, int height) {
         else ctx->window->showFullScreen();
     });
 
-    // Compact mode shortcut
+    // Safe Minimal Mode shortcut (Fixed segfault: removed null button dereference)
     new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_M), ctx->window, [ctx]() {
-        bool vis = ctx->backBtn->isVisible();
-        ctx->backBtn->setVisible(!vis);
-        ctx->forwardBtn->setVisible(!vis);
-        ctx->reloadBtn->setVisible(!vis);
-        ctx->engineToggleBtn->setVisible(!vis);
+        if (!ctx->backBtn) return;
+        bool vis = !ctx->backBtn->isVisible();
+        ctx->backBtn->setVisible(vis);
+        if (ctx->forwardBtn) ctx->forwardBtn->setVisible(vis);
+        if (ctx->reloadBtn) ctx->reloadBtn->setVisible(vis);
     });
 
     // Tab switching
@@ -1762,7 +2013,7 @@ BrowserHandle browser_create(const char* title, int width, int height) {
         }
     });
 
-    // 2. Setup Smart Memory Daemon Timer (runs every 25s)
+    // Smart Memory Daemon Timer (runs every 25s)
     ctx->memoryTimer = new QTimer(ctx->window);
     QObject::connect(ctx->memoryTimer, &QTimer::timeout, [ctx]() {
         run_smart_memory_cleanup(ctx);
@@ -1776,21 +2027,127 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     return static_cast<BrowserHandle>(ctx);
 }
 
+static int find_tab_index_by_view(BrowserContext *ctx, QWebEngineView *view) {
+    if (!ctx || !view) return -1;
+    for (size_t i = 0; i < ctx->tabs.size(); ++i) {
+        if (ctx->tabs[i].view == view) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
 static void attach_view_signals(BrowserContext *ctx, QWebEngineView *view) {
     if (ctx->currentZoom > 0.2f && ctx->currentZoom < 5.0f) {
         view->setZoomFactor(ctx->currentZoom);
     }
 
+    // Favicon support on tabs
+    QObject::connect(view, &QWebEngineView::iconChanged, [ctx, view](const QIcon &icon) {
+        int idx = find_tab_index_by_view(ctx, view);
+        if (idx >= 0) {
+            ctx->tabBar->setTabIcon(idx, icon);
+        }
+    });
+
+    // Loading progress bar & reload/stop button state
+    QObject::connect(view, &QWebEngineView::loadStarted, [ctx, view]() {
+        if (ctx->viewStack->currentWidget() == view) {
+            if (ctx->loadProgressBar) {
+                ctx->loadProgressBar->setValue(10);
+                ctx->loadProgressBar->show();
+            }
+            if (ctx->reloadBtn) ctx->reloadBtn->setText("✕");
+        }
+    });
+
+    QObject::connect(view, &QWebEngineView::loadProgress, [ctx, view](int progress) {
+        if (ctx->viewStack->currentWidget() == view && ctx->loadProgressBar) {
+            ctx->loadProgressBar->setValue(progress);
+            if (progress >= 100) {
+                ctx->loadProgressBar->hide();
+            } else {
+                ctx->loadProgressBar->show();
+            }
+        }
+    });
+
+    // Link hover status bar
+    QObject::connect(view->page(), &QWebEnginePage::linkHovered, [ctx](const QString &url) {
+        if (!ctx || !ctx->statusBarWidget || !ctx->statusHoverLabel) return;
+        if (url.isEmpty()) {
+            ctx->statusHoverLabel->clear();
+            if (ctx->statusToastLabel && ctx->statusToastLabel->text().isEmpty()) {
+                ctx->statusBarWidget->hide();
+            }
+        } else {
+            ctx->statusHoverLabel->setText(url);
+            ctx->statusBarWidget->show();
+        }
+    });
+
+    // HTML5 Fullscreen request handler (e.g., YouTube fullscreen button)
+    QObject::connect(view->page(), &QWebEnginePage::fullScreenRequested, [ctx](QWebEngineFullScreenRequest req) {
+        req.accept();
+        if (!ctx || !ctx->window) return;
+        if (req.toggleOn()) {
+            if (ctx->tabRowWidget) ctx->tabRowWidget->hide();
+            if (ctx->navBar) ctx->navBar->hide();
+            ctx->window->showFullScreen();
+        } else {
+            if (ctx->navBar) ctx->navBar->show();
+            update_tab_bar_placement(ctx);
+            ctx->window->showNormal();
+        }
+    });
+
+    // Feature permission prompt (Camera, Microphone, Geolocation, Notifications)
+    QObject::connect(view->page(), &QWebEnginePage::featurePermissionRequested,
+        [ctx, view](const QUrl &securityOrigin, QWebEnginePage::Feature feature) {
+            if (!ctx || !ctx->window) return;
+            QString featName;
+            switch (feature) {
+                case QWebEnginePage::Geolocation: featName = "Lokasi (Geolocation)"; break;
+                case QWebEnginePage::MediaAudioCapture: featName = "Mikrofon"; break;
+                case QWebEnginePage::MediaVideoCapture: featName = "Kamera"; break;
+                case QWebEnginePage::MediaAudioVideoCapture: featName = "Kamera & Mikrofon"; break;
+                case QWebEnginePage::Notifications: featName = "Notifikasi Desktop"; break;
+                case QWebEnginePage::DesktopVideoCapture:
+                case QWebEnginePage::DesktopAudioVideoCapture: featName = "Perekaman Layar"; break;
+                default:
+                    view->page()->setFeaturePermission(securityOrigin, feature, QWebEnginePage::PermissionDeniedByUser);
+                    return;
+            }
+            auto reply = QMessageBox::question(
+                ctx->window,
+                "Izin Situs Web",
+                QString("Izinkan <b>%1</b> mengakses <b>%2</b>?").arg(securityOrigin.host(), featName),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No
+            );
+            view->page()->setFeaturePermission(
+                securityOrigin,
+                feature,
+                reply == QMessageBox::Yes ? QWebEnginePage::PermissionGrantedByUser : QWebEnginePage::PermissionDeniedByUser
+            );
+        }
+    );
+
     QObject::connect(view, &QWebEngineView::titleChanged, [ctx, view](const QString &title) {
-        int idx = ctx->viewStack->indexOf(view);
+        int idx = find_tab_index_by_view(ctx, view);
         if (idx >= 0 && idx < static_cast<int>(ctx->tabs.size())) {
-            QString displayTitle = title.trimmed().isEmpty() ? "New Tab" : title;
+            QString fallback = ctx->tabs[idx].isPrivate ? "Private Tab" : "New Tab";
+            QString displayTitle = title.trimmed().isEmpty() ? fallback : title;
             ctx->tabs[idx].savedTitle = displayTitle;
-            if (displayTitle.length() > 25) {
-                displayTitle = displayTitle.left(22) + "...";
+            if (displayTitle.length() > 26) {
+                displayTitle = displayTitle.left(23) + "...";
+            }
+            if (ctx->tabs[idx].isPrivate && !displayTitle.startsWith("🕶️ ")) {
+                displayTitle = "🕶️ " + displayTitle;
             }
             if (!ctx->tabs[idx].isSuspended) {
                 ctx->tabBar->setTabText(idx, displayTitle);
+                ctx->tabBar->setTabToolTip(idx, title);
             }
             if (ctx->tabCallback) {
                 QByteArray urlB = view->url().toString().toUtf8();
@@ -1801,14 +2158,13 @@ static void attach_view_signals(BrowserContext *ctx, QWebEngineView *view) {
     });
 
     QObject::connect(view, &QWebEngineView::urlChanged, [ctx, view](const QUrl &url) {
-        int idx = ctx->viewStack->indexOf(view);
+        int idx = find_tab_index_by_view(ctx, view);
         if (idx >= 0 && idx < static_cast<int>(ctx->tabs.size())) {
             ctx->tabs[idx].savedUrl = url.toString();
             ctx->tabs[idx].lastActive = QDateTime::currentSecsSinceEpoch();
         }
         if (idx == ctx->tabBar->currentIndex()) {
-            ctx->urlBar->setText(url.toString());
-            update_bookmark_button(ctx, is_url_bookmarked(url.toString()));
+            update_url_bar_for_current_tab(ctx);
         }
         if (ctx->tabCallback && idx >= 0) {
             QByteArray urlB = url.toString().toUtf8();
@@ -1817,21 +2173,43 @@ static void attach_view_signals(BrowserContext *ctx, QWebEngineView *view) {
         }
     });
 
-    // Cosmetic Filter & User Custom Script/Style Injection
+    // Cosmetic Filter (from Rust AdBlock engine) & User Custom Script/Style Injection
     QObject::connect(view, &QWebEngineView::loadFinished, [ctx, view](bool ok) {
+        if (ctx->viewStack->currentWidget() == view) {
+            if (ctx->loadProgressBar) ctx->loadProgressBar->hide();
+            if (ctx->reloadBtn) ctx->reloadBtn->setText("↻");
+            update_nav_buttons_state(ctx);
+        }
         if (!ok) return;
 
-        static const QString cosmeticFilterJs =
-            "(() => {"
-            "  const css = '.adsbygoogle, .ad-banner, .advertisement, [id^=\"google_ads_\"], [id^=\"ad-\"], [class*=\"sponsored\"], [class*=\"ad-slot\"] { display: none !important; }';"
-            "  const el = document.createElement('style');"
-            "  el.setAttribute('data-ublock-cosmetic', 'true');"
-            "  el.textContent = css;"
-            "  if (document.head) document.head.appendChild(el);"
-            "})();";
-        view->page()->runJavaScript(cosmeticFilterJs);
+        if (ctx->enableAdblock && ctx->enableCosmeticFilter) {
+            QString pageUrl = view->url().toString();
+            if (pageUrl.startsWith("http://") || pageUrl.startsWith("https://")) {
+                char* rawCss = rust_get_cosmetic_css(pageUrl.toUtf8().constData());
+                if (rawCss) {
+                    QString cosmeticCss = QString::fromUtf8(rawCss);
+                    rust_free_c_str(rawCss);
+                    if (!cosmeticCss.isEmpty()) {
+                        QString injectCosmetic = QString(
+                            "(() => {"
+                            "  const hex = '%1';"
+                            "  let css = '';"
+                            "  for (let i = 0; i < hex.length; i += 2) {"
+                            "    css += String.fromCharCode(parseInt(hex.substr(i, 2), 16));"
+                            "  }"
+                            "  const el = document.createElement('style');"
+                            "  el.setAttribute('data-ublock-cosmetic', 'true');"
+                            "  el.textContent = css;"
+                            "  if (document.head) document.head.appendChild(el);"
+                            "})();"
+                        ).arg(QString(cosmeticCss.toUtf8().toHex()));
+                        view->page()->runJavaScript(injectCosmetic);
+                    }
+                }
+            }
+        }
 
-        if (!ctx->customUserStyle.isEmpty()) {
+        if (!ctx->customPageCss.isEmpty()) {
             QString cleanInject = QString(
                 "(() => {"
                 "  const hex = '%1';"
@@ -1843,7 +2221,7 @@ static void attach_view_signals(BrowserContext *ctx, QWebEngineView *view) {
                 "  el.textContent = css;"
                 "  if (document.head) document.head.appendChild(el);"
                 "})();"
-            ).arg(QString(ctx->customUserStyle.toUtf8().toHex()));
+            ).arg(QString(ctx->customPageCss.toUtf8().toHex()));
             view->page()->runJavaScript(cleanInject);
         }
 
@@ -1853,32 +2231,50 @@ static void attach_view_signals(BrowserContext *ctx, QWebEngineView *view) {
     });
 }
 
-int browser_add_tab(BrowserHandle handle, const char* raw_url) {
-    auto *ctx = static_cast<BrowserContext*>(handle);
+static int create_tab_internal(BrowserContext *ctx, const char* raw_url, bool is_private) {
     if (!ctx || !ctx->tabBar || !ctx->viewStack) return -1;
 
+    QWebEngineProfile *targetProfile = is_private && ctx->privateProfile
+        ? ctx->privateProfile
+        : QWebEngineProfile::defaultProfile();
+
     auto *view = new QWebEngineView(ctx->viewStack);
-    view->setPage(new BrowserPage(ctx, view));
+    view->setPage(new BrowserPage(ctx, targetProfile, view));
     attach_view_signals(ctx, view);
 
     TabMeta meta;
     meta.view = view;
     meta.lastActive = QDateTime::currentSecsSinceEpoch();
     meta.isSuspended = false;
+    meta.isPrivate = is_private;
     ctx->tabs.push_back(meta);
 
     ctx->viewStack->addWidget(view);
-    int index = ctx->tabBar->addTab("New Tab");
+    int index = ctx->tabBar->addTab(is_private ? "🕶️ Private Tab" : "New Tab");
     ctx->tabBar->setCurrentIndex(index);
-    ctx->viewStack->setCurrentIndex(index);
+    ctx->viewStack->setCurrentWidget(view);
 
     if (raw_url && raw_url[0] != '\0') {
-        browser_navigate(handle, raw_url);
+        browser_navigate(ctx, raw_url);
     } else {
-        browser_navigate(handle, "falkon:home");
+        browser_navigate(ctx, "falkon:home");
+    }
+
+    if (is_private) {
+        show_status_toast(ctx, "🕶️ Mode Penyamaran: Riwayat & cookie tidak disimpan", 2800);
     }
 
     return index;
+}
+
+int browser_add_tab(BrowserHandle handle, const char* raw_url) {
+    auto *ctx = static_cast<BrowserContext*>(handle);
+    return create_tab_internal(ctx, raw_url, false);
+}
+
+int browser_add_private_tab(BrowserHandle handle, const char* raw_url) {
+    auto *ctx = static_cast<BrowserContext*>(handle);
+    return create_tab_internal(ctx, raw_url, true);
 }
 
 void browser_close_tab(BrowserHandle handle, int index) {
@@ -1886,39 +2282,46 @@ void browser_close_tab(BrowserHandle handle, int index) {
     if (!ctx || !ctx->tabBar || !ctx->viewStack) return;
 
     if (ctx->tabBar->count() > 1 && index >= 0 && index < static_cast<int>(ctx->tabs.size())) {
-        auto *view = ctx->viewStack->widget(index);
+        const auto &closingMeta = ctx->tabs[index];
+        if (!closingMeta.isPrivate &&
+            !closingMeta.savedUrl.isEmpty() &&
+            closingMeta.savedUrl != "falkon:home" &&
+            closingMeta.savedUrl != "about:blank") {
+            ctx->closedTabs.push_back({ closingMeta.savedUrl, closingMeta.savedTitle });
+            if (ctx->closedTabs.size() > 25) {
+                ctx->closedTabs.erase(ctx->closedTabs.begin());
+            }
+        }
+
+        auto *view = ctx->tabs[index].view;
+        ctx->tabs.erase(ctx->tabs.begin() + index);
         ctx->tabBar->removeTab(index);
         if (view) {
             ctx->viewStack->removeWidget(view);
             view->deleteLater();
         }
-        ctx->tabs.erase(ctx->tabs.begin() + index);
+        int newActive = ctx->tabBar->currentIndex();
+        if (newActive >= 0 && newActive < static_cast<int>(ctx->tabs.size()) && ctx->tabs[newActive].view) {
+            ctx->viewStack->setCurrentWidget(ctx->tabs[newActive].view);
+        }
+        update_url_bar_for_current_tab(ctx);
+
         if (ctx->tabCloseCallback) {
             ctx->tabCloseCallback(index);
         }
     } else if (ctx->tabBar->count() == 1) {
-        auto *view = qobject_cast<QWebEngineView*>(ctx->viewStack->widget(0));
-        if (view) {
-            view->load(QUrl("about:blank"));
-            if (!ctx->tabs.empty()) {
-                ctx->tabs[0].savedUrl = "about:blank";
-                ctx->tabs[0].savedTitle = "New Tab";
-                ctx->tabs[0].isSuspended = false;
-            }
-            ctx->tabBar->setTabText(0, "New Tab");
-            ctx->urlBar->setText("");
-            ctx->urlBar->setPlaceholderText("Search Google or type a URL... (Ctrl+L)");
-            update_bookmark_button(ctx, false);
-        }
+        browser_navigate(handle, "falkon:home");
     }
 }
 
 void browser_switch_tab(BrowserHandle handle, int index) {
     auto *ctx = static_cast<BrowserContext*>(handle);
     if (!ctx || !ctx->tabBar || !ctx->viewStack) return;
-    if (index >= 0 && index < ctx->tabBar->count()) {
+    if (index >= 0 && index < static_cast<int>(ctx->tabs.size())) {
         ctx->tabBar->setCurrentIndex(index);
-        ctx->viewStack->setCurrentIndex(index);
+        if (ctx->tabs[index].view) {
+            ctx->viewStack->setCurrentWidget(ctx->tabs[index].view);
+        }
     }
 }
 
@@ -1940,13 +2343,14 @@ void browser_navigate(BrowserHandle handle, const char* raw_url) {
         view->setHtml(generate_settings_page_html(ctx), QUrl("falkon:settings"));
         ctx->urlBar->setText("falkon:settings");
         update_bookmark_button(ctx, false);
+        update_security_indicator(ctx, "falkon:settings");
         if (idx >= 0 && idx < static_cast<int>(ctx->tabs.size())) {
             ctx->tabs[idx].savedUrl = "falkon:settings";
             ctx->tabs[idx].savedTitle = "Pengaturan";
             ctx->tabs[idx].lastActive = QDateTime::currentSecsSinceEpoch();
             ctx->tabs[idx].isSuspended = false;
         }
-        ctx->tabBar->setTabText(idx, "Pengaturan");
+        ctx->tabBar->setTabText(idx, "⚙️ Pengaturan");
         return;
     }
 
@@ -1954,38 +2358,53 @@ void browser_navigate(BrowserHandle handle, const char* raw_url) {
         view->page()->setBackgroundColor(Qt::transparent);
         view->setHtml(generate_start_page_html(ctx), QUrl("falkon:home"));
         ctx->urlBar->setText("");
-        ctx->urlBar->setPlaceholderText("Search Google or type a URL... (Ctrl+L)");
+        ctx->urlBar->setPlaceholderText(ctx->useGoogleSearch
+            ? "Cari di Google atau ketik alamat URL... (Ctrl+L)"
+            : "Cari di DuckDuckGo atau ketik alamat URL... (Ctrl+L)");
         update_bookmark_button(ctx, false);
+        update_security_indicator(ctx, "falkon:home");
         if (idx >= 0 && idx < static_cast<int>(ctx->tabs.size())) {
             ctx->tabs[idx].savedUrl = "falkon:home";
-            ctx->tabs[idx].savedTitle = "New Tab";
+            ctx->tabs[idx].savedTitle = ctx->tabs[idx].isPrivate ? "Private Tab" : "New Tab";
             ctx->tabs[idx].lastActive = QDateTime::currentSecsSinceEpoch();
             ctx->tabs[idx].isSuspended = false;
+            ctx->tabBar->setTabText(idx, ctx->tabs[idx].isPrivate ? "🕶️ Private Tab" : "New Tab");
         }
-        ctx->tabBar->setTabText(idx, "New Tab");
         return;
     }
 
     view->page()->setBackgroundColor(Qt::white);
     QUrl url;
 
-    // Check if query is a URL or search query
-    if (!s.contains("://") && !s.startsWith("about:")) {
-        if (s.contains(".") && !s.contains(" ")) {
+    if (!s.contains("://") && !s.startsWith("about:") && !s.startsWith("data:")) {
+        if ((s.contains(".") || s.startsWith("localhost")) && !s.contains(" ")) {
             url = QUrl("https://" + s);
         } else {
-            // Dual Engine Router: Support !g / g prefix for Google, !d / d prefix for DuckDuckGo
             if (s.startsWith("!g ") || s.startsWith("g ")) {
                 QString q = s.mid(s.indexOf(' ') + 1).trimmed();
                 url = QUrl("https://www.google.com/search?q=" + QString::fromUtf8(QUrl::toPercentEncoding(q)));
             } else if (s.startsWith("!d ") || s.startsWith("d ")) {
                 QString q = s.mid(s.indexOf(' ') + 1).trimmed();
                 url = QUrl("https://html.duckduckgo.com/html/?q=" + QString::fromUtf8(QUrl::toPercentEncoding(q)));
+            } else if (s.startsWith("!gh ")) {
+                QString q = s.mid(4).trimmed();
+                url = QUrl("https://github.com/search?q=" + QString::fromUtf8(QUrl::toPercentEncoding(q)));
+            } else if (s.startsWith("!yt ")) {
+                QString q = s.mid(4).trimmed();
+                url = QUrl("https://www.youtube.com/results?search_query=" + QString::fromUtf8(QUrl::toPercentEncoding(q)));
+            } else if (s.startsWith("!w ")) {
+                QString q = s.mid(3).trimmed();
+                url = QUrl("https://id.wikipedia.org/w/index.php?search=" + QString::fromUtf8(QUrl::toPercentEncoding(q)));
+            } else if (!ctx->customSearchEngine.isEmpty() &&
+                       ctx->customSearchEngine.contains("%s") &&
+                       !ctx->customSearchEngine.contains("google.com/search") &&
+                       !ctx->customSearchEngine.contains("duckduckgo.com")) {
+                QString target = ctx->customSearchEngine;
+                target.replace("%s", QString::fromUtf8(QUrl::toPercentEncoding(s)));
+                url = QUrl(target);
             } else if (ctx->useGoogleSearch) {
-                // Active toggle is Google
                 url = QUrl("https://www.google.com/search?q=" + QString::fromUtf8(QUrl::toPercentEncoding(s)));
             } else {
-                // Active toggle is DuckDuckGo Lite (ultra fast, minimal RAM)
                 url = QUrl("https://html.duckduckgo.com/html/?q=" + QString::fromUtf8(QUrl::toPercentEncoding(s)));
             }
         }
@@ -2046,6 +2465,7 @@ int browser_run(BrowserHandle handle) {
 void browser_destroy(BrowserHandle handle) {
     auto *ctx = static_cast<BrowserContext*>(handle);
     if (!ctx) return;
+    g_block_cb = nullptr;
     if (ctx->memoryTimer) {
         ctx->memoryTimer->stop();
         delete ctx->memoryTimer;

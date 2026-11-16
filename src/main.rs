@@ -4,6 +4,7 @@ use falkon_rust::config::ConfigManager;
 use falkon_rust::history::HistoryManager;
 use falkon_rust::tabs::TabManager;
 use std::env;
+use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -12,6 +13,41 @@ static ADBLOCK: OnceLock<AdBlockManager> = OnceLock::new();
 static TAB_MGR: OnceLock<Mutex<TabManager>> = OnceLock::new();
 static HISTORY_MGR: OnceLock<HistoryManager> = OnceLock::new();
 static BROWSER_PTR: AtomicPtr<BrowserApp> = AtomicPtr::new(std::ptr::null_mut());
+
+#[no_mangle]
+pub extern "C" fn rust_set_adblock_enabled(enabled: bool) {
+    if let Some(mgr) = ADBLOCK.get() {
+        mgr.set_enabled(enabled);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_get_cosmetic_css(url: *const c_char) -> *mut c_char {
+    let url_str = if url.is_null() {
+        ""
+    } else {
+        unsafe { CStr::from_ptr(url).to_str().unwrap_or("") }
+    };
+    if url_str.is_empty() {
+        return std::ptr::null_mut();
+    }
+    if let Some(mgr) = ADBLOCK.get() {
+        let css = mgr.cosmetic_css_for_url(url_str);
+        if !css.is_empty() {
+            return CString::new(css)
+                .map(|c| c.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+    }
+    std::ptr::null_mut()
+}
+
+#[no_mangle]
+pub extern "C" fn rust_clear_history() {
+    if let Some(hist) = HISTORY_MGR.get() {
+        hist.clear();
+    }
+}
 
 extern "C" fn rust_block_callback(
     url: *const c_char,
@@ -25,9 +61,7 @@ extern "C" fn rust_block_callback(
         let blocked = mgr.check_url(url_str, resource_type, source_str);
         if blocked {
             let count = mgr.blocked_count();
-            eprintln!("[uBlock Blocked #{}] URL: {}", count, url_str);
-
-            let app_ptr = BROWSER_PTR.load(Ordering::Relaxed);
+            let app_ptr = BROWSER_PTR.load(Ordering::Acquire);
             if !app_ptr.is_null() {
                 unsafe {
                     (*app_ptr).update_badge(count);
@@ -44,20 +78,24 @@ extern "C" fn rust_tab_callback(tab_index: c_int, url: *const c_char, title: *co
     let url_str = unsafe { c_to_str(url) };
     let title_str = unsafe { c_to_str(title) };
 
+    let mut is_private = false;
     if let Some(mgr_lock) = TAB_MGR.get() {
         if let Ok(mut mgr) = mgr_lock.lock() {
+            while mgr.count() <= tab_index as usize {
+                mgr.add("");
+            }
             mgr.update(tab_index as usize, url_str, title_str);
+            if let Some(tab) = mgr.get(tab_index as usize) {
+                is_private = tab.is_private;
+            }
         }
     }
 
-    if let Some(hist) = HISTORY_MGR.get() {
-        hist.record(url_str, title_str);
+    if !is_private {
+        if let Some(hist) = HISTORY_MGR.get() {
+            hist.record(url_str, title_str);
+        }
     }
-
-    println!(
-        "[Tab Event] Tab #{} -> Title: \"{}\", URL: \"{}\"",
-        tab_index, title_str, url_str
-    );
 }
 
 extern "C" fn rust_tab_close_callback(tab_index: c_int) {
@@ -66,11 +104,18 @@ extern "C" fn rust_tab_close_callback(tab_index: c_int) {
             mgr.remove(tab_index as usize);
         }
     }
-    println!("[Tab Event] Closed Tab #{}", tab_index);
+}
+
+extern "C" fn rust_tab_move_callback(from_index: c_int, to_index: c_int) {
+    if let Some(mgr_lock) = TAB_MGR.get() {
+        if let Ok(mut mgr) = mgr_lock.lock() {
+            mgr.move_tab(from_index as usize, to_index as usize);
+        }
+    }
 }
 
 fn print_usage() {
-    println!("Falkon-Rust — High-Performance Minimalist Browser with uBlock Origin & Tabs");
+    println!("Falkon-Rust — High-Performance Minimalist Browser with uBlock Origin & Smart Memory");
     println!("Usage: falkon-rust [OPTIONS] [URL]");
     println!();
     println!("Options:");
@@ -78,13 +123,17 @@ fn print_usage() {
     println!("  --check <URL>           Headless verification: test if URL is blocked by uBlock");
     println!("  --homepage <URL>        Override default homepage");
     println!("  --search <TEMPLATE>     Override search template (e.g. 'https://search.brave.com/search?q=%s')");
+    println!("  --private               Open initial tab in Private / Incognito mode");
     println!("  -h, --help              Show this help message");
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let cfg_mgr = ConfigManager::load();
-    let adblock = AdBlockManager::new();
+    let adblock = AdBlockManager::with_custom_rules(
+        &cfg_mgr.config.custom_rules,
+        cfg_mgr.config.enable_adblock,
+    );
 
     // Load custom rules from config directory if present
     let custom_rules_file = cfg_mgr.dir.join("custom_rules.txt");
@@ -95,6 +144,7 @@ fn main() {
     let mut initial_url = cfg_mgr.config.homepage.clone();
     let mut search_override: Option<String> = None;
     let mut check_url: Option<String> = None;
+    let mut start_private = false;
     let mut i = 1;
 
     while i < args.len() {
@@ -130,6 +180,9 @@ fn main() {
                     i += 1;
                 }
             }
+            "--private" | "--incognito" => {
+                start_private = true;
+            }
             url if !url.starts_with('-') => {
                 initial_url = url.to_string();
             }
@@ -152,11 +205,8 @@ fn main() {
     let _ = HISTORY_MGR.set(HistoryManager::new());
 
     let mut tab_manager = TabManager::new();
-    tab_manager.add(&initial_url);
+    tab_manager.add_with_mode(&initial_url, start_private);
     let _ = TAB_MGR.set(Mutex::new(tab_manager));
-
-    println!("Starting Falkon-Rust...");
-    println!("Homepage: {}", initial_url);
 
     let app = BrowserApp::new(
         "Falkon-Rust",
@@ -166,8 +216,8 @@ fn main() {
     );
     app.set_tab_callback(rust_tab_callback);
     app.set_tab_close_callback(rust_tab_close_callback);
+    app.set_tab_move_callback(rust_tab_move_callback);
 
-    // Apply customizations
     let tab_pos = match cfg_mgr.config.tab_position.to_lowercase().as_str() {
         "bottom" => 1,
         "hidden" => 2,
@@ -180,17 +230,15 @@ fn main() {
         cfg_mgr.config.show_new_tab_button,
         cfg_mgr.config.default_zoom,
     );
-    let custom_qss = if cfg_mgr.config.theme == "custom" {
-        cfg_mgr.user_chrome_qss.as_deref()
-    } else {
-        None
-    };
+    let custom_qss = cfg_mgr.user_chrome_qss.as_deref();
     app.set_theme(&cfg_mgr.config.theme, custom_qss);
-    app.set_colors(
-        &cfg_mgr.config.bg_color,
-        &cfg_mgr.config.fg_color,
-        &cfg_mgr.config.accent_color,
-    );
+    if cfg_mgr.config.theme.eq_ignore_ascii_case("custom") {
+        app.set_colors(
+            &cfg_mgr.config.bg_color,
+            &cfg_mgr.config.fg_color,
+            &cfg_mgr.config.accent_color,
+        );
+    }
 
     let search_engine = search_override.unwrap_or(cfg_mgr.config.search_engine);
     app.set_search_engine(&search_engine);
@@ -207,11 +255,17 @@ fn main() {
 
     let app_box = Box::new(app);
     let app_raw = Box::into_raw(app_box);
-    BROWSER_PTR.store(app_raw, Ordering::Relaxed);
+    BROWSER_PTR.store(app_raw, Ordering::Release);
 
     unsafe {
-        (*app_raw).add_tab(&initial_url);
+        if start_private {
+            (*app_raw).add_private_tab(&initial_url);
+        } else {
+            (*app_raw).add_tab(&initial_url);
+        }
         let exit_code = (*app_raw).run();
+        // Reset global pointer SEBELUM menjatuhkan BrowserApp agar IO thread tidak mengakses dangling pointer
+        BROWSER_PTR.store(std::ptr::null_mut(), Ordering::SeqCst);
         let _ = Box::from_raw(app_raw);
         std::process::exit(exit_code);
     }

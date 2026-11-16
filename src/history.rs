@@ -1,12 +1,13 @@
+use crate::config::resolve_config_dir;
 use serde::{Deserialize, Serialize};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{BufReader, BufWriter};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{sync_channel, SyncSender};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HistoryEntry {
     pub url: String,
     pub title: String,
@@ -16,18 +17,21 @@ pub struct HistoryEntry {
 pub struct HistoryManager {
     entries: Mutex<Vec<HistoryEntry>>,
     tx: SyncSender<Vec<HistoryEntry>>,
+    file_path: PathBuf,
 }
 
 impl HistoryManager {
     pub fn new() -> Self {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        let mut dir = PathBuf::from(home);
-        dir.push(".config");
-        dir.push("falkon-rust");
+        let dir = resolve_config_dir();
         let _ = create_dir_all(&dir);
+        Self::with_path(dir.join("history.json"))
+    }
 
-        let mut file_path = dir;
-        file_path.push("history.json");
+    pub fn with_path<P: AsRef<Path>>(path: P) -> Self {
+        let file_path = path.as_ref().to_path_buf();
+        if let Some(parent) = file_path.parent() {
+            let _ = create_dir_all(parent);
+        }
 
         let mut entries = Vec::new();
         if file_path.exists() {
@@ -39,8 +43,8 @@ impl HistoryManager {
             }
         }
 
-        let (tx, rx) = sync_channel::<Vec<HistoryEntry>>(4);
-        let save_path = file_path;
+        let (tx, rx) = sync_channel::<Vec<HistoryEntry>>(16);
+        let save_path = file_path.clone();
         std::thread::Builder::new()
             .name("history-writer".into())
             .spawn(move || {
@@ -61,11 +65,18 @@ impl HistoryManager {
         Self {
             entries: Mutex::new(entries),
             tx,
+            file_path,
         }
     }
 
     pub fn record(&self, url: &str, title: &str) {
-        if url.is_empty() || url.starts_with("about:") {
+        let trimmed = url.trim();
+        if trimmed.is_empty()
+            || trimmed.starts_with("about:")
+            || trimmed.starts_with("falkon:")
+            || trimmed.starts_with("falkon-set:")
+            || trimmed.starts_with("data:")
+        {
             return;
         }
 
@@ -74,28 +85,59 @@ impl HistoryManager {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let entry = HistoryEntry {
-            url: url.to_string(),
-            title: title.to_string(),
-            timestamp: now,
+        let clean_title = if title.trim().is_empty() {
+            trimmed.to_string()
+        } else {
+            title.trim().to_string()
         };
 
         if let Ok(mut entries) = self.entries.lock() {
-            // Avoid duplicate consecutive entries
-            if let Some(last) = entries.last() {
-                if last.url == url {
+            if let Some(last) = entries.last_mut() {
+                if last.url == trimmed {
+                    if !title.trim().is_empty() && last.title != clean_title {
+                        last.title = clean_title;
+                        last.timestamp = now;
+                        let _ = self.tx.try_send(entries.clone());
+                    }
                     return;
                 }
             }
-            entries.push(entry);
 
-            // Keep max 1000 items
+            entries.push(HistoryEntry {
+                url: trimmed.to_string(),
+                title: clean_title,
+                timestamp: now,
+            });
+
             if entries.len() > 1000 {
-                entries.remove(0);
+                let overflow = entries.len() - 1000;
+                entries.drain(0..overflow);
             }
 
             let _ = self.tx.try_send(entries.clone());
         }
+    }
+
+    pub fn clear(&self) {
+        if let Ok(mut entries) = self.entries.lock() {
+            entries.clear();
+            let _ = self.tx.try_send(Vec::new());
+        }
+        if let Ok(file) = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&self.file_path)
+        {
+            let _ = std::io::Write::write_all(&mut BufWriter::new(file), b"[]");
+        }
+    }
+
+    pub fn list(&self) -> Vec<HistoryEntry> {
+        self.entries
+            .lock()
+            .map(|e| e.clone())
+            .unwrap_or_default()
     }
 }
 

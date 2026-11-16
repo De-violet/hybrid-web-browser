@@ -3,11 +3,20 @@ Version=1.0
 Type=Application
 Name=Falkon Rust
 GenericName=Web Browser
-Comment=High-Performance Minimalist Web Browser with uBlock Origin
-Exec=/home/deviolete/Projects/falkon-rust/target/release/falkon-rust %u
-Icon=/home/deviolete/.local/share/icons/hicolor/scalable/apps/falkon-rust.svg
+Comment=High-Performance Minimalist Web Browser with uBlock Origin & Smart Memory
+Exec=falkon-rust %u
+Icon=falkon-rust
 Terminal=false
 Categories=Network;WebBrowser;
 MimeType=text/html;text/xml;application/xhtml+xml;application/xml;x-scheme-handler/http;x-scheme-handler/https;
 StartupNotify=true
 StartupWMClass=falkon-rust
+Actions=new-window;new-private-window;
+
+[Desktop Action new-window]
+Name=Jendela Baru
+Exec=falkon-rust
+
+[Desktop Action new-private-window]
+Name=Jendela Penyamaran Baru (Private)
+Exec=falkon-rust --private

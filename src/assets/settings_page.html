@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pengaturan</title>
+<title>Pengaturan — Falkon-Rust</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -11,7 +11,7 @@
     height: 100vh;
     margin: 0;
     padding: 0;
-    background: transparent;
+    background: @BG@;
     color: @FG@;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
     user-select: none;
@@ -21,12 +21,12 @@
     display: flex;
     width: 100%;
     height: 100%;
-    background: rgba(17, 17, 27, 0.78);
+    background: @BG@;
   }
   .sidebar {
-    width: 250px;
-    background: rgba(0, 0, 0, 0.20);
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    width: 260px;
+    background: @SURFACE@;
+    border-right: 1px solid @BORDER@;
     display: flex;
     flex-direction: column;
     padding: 28px 16px;
@@ -34,25 +34,25 @@
     flex-shrink: 0;
   }
   .sidebar-header {
-    font-size: 19px;
-    font-weight: 600;
+    font-size: 18px;
+    font-weight: 700;
     padding: 0 12px 20px 12px;
     letter-spacing: -0.3px;
     display: flex;
     align-items: center;
     gap: 10px;
-    color: #ffffff;
+    color: @FG@;
   }
   .nav-btn {
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 10px 14px;
-    border-radius: 8px;
-    border: none;
+    border-radius: 10px;
+    border: 1px solid transparent;
     background: transparent;
     color: @FG@;
-    opacity: 0.8;
+    opacity: 0.78;
     font-size: 13.5px;
     font-weight: 500;
     cursor: pointer;
@@ -60,14 +60,25 @@
     transition: all 0.15s ease;
   }
   .nav-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(128, 128, 150, 0.12);
     opacity: 1;
   }
   .nav-btn.active {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(128, 128, 150, 0.18);
+    border-color: @BORDER@;
     color: @ACCENT@;
     font-weight: 600;
     opacity: 1;
+  }
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 12px;
+    border-radius: 10px;
+    background: rgba(128, 128, 150, 0.08);
+    border: 1px solid @BORDER@;
+    font-size: 11.5px;
+    line-height: 1.5;
+    opacity: 0.8;
   }
   .content-area {
     flex: 1;
@@ -76,22 +87,27 @@
   }
   .tab-pane {
     display: none;
-    max-width: 760px;
+    max-width: 780px;
   }
   .tab-pane.active {
     display: block;
   }
   h2 {
     font-size: 24px;
-    font-weight: 600;
-    margin-bottom: 24px;
-    color: #ffffff;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: @FG@;
     letter-spacing: -0.4px;
   }
+  .pane-sub {
+    font-size: 13px;
+    opacity: 0.68;
+    margin-bottom: 24px;
+  }
   .card {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    background: @SURFACE@;
+    border: 1px solid @BORDER@;
+    border-radius: 14px;
     padding: 20px 24px;
     margin-bottom: 20px;
     display: flex;
@@ -99,10 +115,10 @@
     gap: 16px;
   }
   .card-header {
-    font-size: 15px;
+    font-size: 14.5px;
     font-weight: 600;
-    color: #ffffff;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    color: @ACCENT@;
+    border-bottom: 1px solid @BORDER@;
     padding-bottom: 10px;
   }
   .setting-row {
@@ -119,11 +135,11 @@
   .setting-title {
     font-size: 14px;
     font-weight: 500;
-    color: #ffffff;
+    color: @FG@;
   }
   .setting-desc {
-    font-size: 12.5px;
-    opacity: 0.65;
+    font-size: 12px;
+    opacity: 0.68;
   }
   .switch {
     position: relative;
@@ -141,7 +157,7 @@
     position: absolute;
     cursor: pointer;
     top: 0; left: 0; right: 0; bottom: 0;
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(128, 128, 150, 0.35);
     transition: .2s;
     border-radius: 24px;
   }
@@ -163,8 +179,8 @@
     transform: translateX(20px);
   }
   select, input[type="text"] {
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: @BG@;
+    border: 1px solid @BORDER@;
     color: @FG@;
     padding: 8px 12px;
     border-radius: 8px;
@@ -176,13 +192,13 @@
   }
   .theme-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
-    margin-top: 8px;
+    margin-top: 6px;
   }
   .theme-card {
-    border: 2px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
+    border: 2px solid @BORDER@;
+    border-radius: 12px;
     padding: 12px;
     cursor: pointer;
     display: flex;
@@ -190,22 +206,23 @@
     align-items: center;
     gap: 8px;
     transition: all 0.15s;
-    background: rgba(0, 0, 0, 0.25);
+    background: @BG@;
   }
   .theme-card:hover {
-    border-color: rgba(255, 255, 255, 0.3);
+    border-color: @ACCENT@;
+    transform: translateY(-2px);
   }
   .theme-card.selected {
     border-color: @ACCENT@;
-    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 1px @ACCENT@;
   }
   .theme-preview {
     width: 100%;
-    height: 38px;
-    border-radius: 6px;
+    height: 40px;
+    border-radius: 7px;
     display: flex;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(128, 128, 150, 0.25);
   }
   .btn {
     background: @ACCENT@;
@@ -216,22 +233,26 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.15s;
+    transition: opacity 0.15s, transform 0.15s;
   }
-  .btn:hover { opacity: 0.9; }
+  .btn:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+  }
   .btn-secondary {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(128, 128, 150, 0.16);
     color: @FG@;
+    border: 1px solid @BORDER@;
   }
   .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.16);
+    background: rgba(128, 128, 150, 0.26);
   }
   textarea {
     width: 100%;
     height: 120px;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    color: #A6E3A1;
+    background: @BG@;
+    border: 1px solid @BORDER@;
+    color: @FG@;
     font-family: monospace;
     font-size: 12.5px;
     padding: 10px;
@@ -239,34 +260,94 @@
     outline: none;
     resize: vertical;
   }
+  textarea:focus {
+    border-color: @ACCENT@;
+  }
+  .shortcut-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .shortcut-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: @BG@;
+    border: 1px solid @BORDER@;
+    font-size: 12.5px;
+  }
+  .kbd {
+    font-family: monospace;
+    font-size: 11.5px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: @SURFACE@;
+    border: 1px solid @BORDER@;
+    color: @ACCENT@;
+    font-weight: 600;
+  }
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 28px;
+    background: @SURFACE@;
+    color: @FG@;
+    border: 1.5px solid @ACCENT@;
+    padding: 10px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.2s ease;
+    pointer-events: none;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
 </style>
 </head>
 <body>
   <div class="app-container">
     <div class="sidebar">
       <div class="sidebar-header">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        Pengaturan
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="@ACCENT@" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        Falkon-Rust
       </div>
-      <button class="nav-btn active" onclick="switchTab('general')">Umum</button>
-      <button class="nav-btn" onclick="switchTab('appearance')">Tampilan & Tema</button>
-      <button class="nav-btn" onclick="switchTab('search')">Pencarian</button>
-      <button class="nav-btn" onclick="switchTab('privacy')">Privasi & Adblock</button>
-      <button class="nav-btn" onclick="switchTab('advanced')">Lanjutan</button>
+      <button class="nav-btn active" onclick="switchTab('general', this)">⚙️ Umum</button>
+      <button class="nav-btn" onclick="switchTab('appearance', this)">🎨 Tampilan & Tema</button>
+      <button class="nav-btn" onclick="switchTab('search', this)">🔍 Pencarian</button>
+      <button class="nav-btn" onclick="switchTab('privacy', this)">🛡️ Privasi & AdBlock</button>
+      <button class="nav-btn" onclick="switchTab('shortcuts', this)">⌨️ Pintasan Keyboard</button>
+      <button class="nav-btn" onclick="switchTab('advanced', this)">🧪 Lanjutan & QSS</button>
+
+      <div class="sidebar-footer">
+        <strong>Falkon-Rust v0.2</strong><br>
+        Rust AdBlock Core + Qt6 WebEngine<br>
+        Smart Memory &amp; Privacy Guard
+      </div>
     </div>
 
     <div class="content-area">
       <!-- UMUM -->
       <div id="general" class="tab-pane active">
-        <h2>Umum</h2>
+        <h2>Pengaturan Umum</h2>
+        <p class="pane-sub">Atur halaman beranda, skala tampilan, dan pengelolaan unduhan.</p>
         <div class="card">
-          <div class="card-header">Startup & Navigasi</div>
+          <div class="card-header">Startup &amp; Navigasi</div>
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Halaman Beranda</div>
-              <div class="setting-desc">Halaman default saat membuka tab atau jendela baru</div>
+              <div class="setting-desc">Halaman default saat membuka tab atau jendela baru (contoh: <code>falkon:home</code>)</div>
             </div>
-            <input type="text" id="homepageInput" value="@HOMEPAGE@" style="width: 280px;" onchange="saveHomepage(this.value)">
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="homepageInput" value="@HOMEPAGE@" style="width: 240px;">
+              <button class="btn" onclick="saveHomepage(document.getElementById('homepageInput').value)">Simpan</button>
+            </div>
           </div>
           <div class="setting-row">
             <div class="setting-info">
@@ -282,38 +363,79 @@
               <option value="1.5" @ZOOM_15@>150%</option>
             </select>
           </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Tombol Navigasi Toolbar</div>
+              <div class="setting-desc">Tampilkan tombol Back, Forward, dan Reload di bilah alamat</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-secondary" onclick="triggerAction('nav_buttons', { val: '1' })">Tampilkan</button>
+              <button class="btn btn-secondary" onclick="triggerAction('nav_buttons', { val: '0' })">Sembunyikan</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">Unduhan &amp; Memori</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Folder Unduhan</div>
+              <div class="setting-desc">Buka direktori penyimpanan file yang diunduh</div>
+            </div>
+            <button class="btn btn-secondary" onclick="triggerAction('open_downloads', {})">📂 Buka Folder Unduhan</button>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Smart Memory Cleanup</div>
+              <div class="setting-desc">Suspensi tab latar belakang yang tidak aktif untuk menghemat RAM</div>
+            </div>
+            <button class="btn btn-secondary" onclick="triggerAction('smart_memory', {})">⚡ Bersihkan Sekarang</button>
+          </div>
         </div>
       </div>
 
       <!-- TAMPILAN & TEMA -->
       <div id="appearance" class="tab-pane">
-        <h2>Tampilan & Tema</h2>
+        <h2>Tampilan &amp; Tema</h2>
+        <p class="pane-sub">Pilih preset warna modern atau sesuaikan tata letak tab dan kepadatan antarmuka.</p>
         <div class="card">
-          <div class="card-header">Preset Tema</div>
+          <div class="card-header">Preset Tema (6 Pilihan)</div>
           <div class="theme-grid">
             <div class="theme-card @THEME_DARK@" onclick="setTheme('dark')">
-              <div class="theme-preview" style="background:#181825;">
-                <div style="width:30%;background:#89b4fa;"></div>
+              <div class="theme-preview" style="background:#11111b;">
+                <div style="width:32%;background:#89b4fa;"></div>
               </div>
-              <span style="font-size:12px;">Dark Glass</span>
+              <span style="font-size:12.5px;font-weight:600;">Dark Glass</span>
             </div>
             <div class="theme-card @THEME_CATPPUCCIN@" onclick="setTheme('catppuccin')">
               <div class="theme-preview" style="background:#1e1e2e;">
-                <div style="width:30%;background:#cba6f7;"></div>
+                <div style="width:32%;background:#cba6f7;"></div>
               </div>
-              <span style="font-size:12px;">Catppuccin</span>
+              <span style="font-size:12.5px;font-weight:600;">Catppuccin Mocha</span>
+            </div>
+            <div class="theme-card @THEME_NORD@" onclick="setTheme('nord')">
+              <div class="theme-preview" style="background:#2e3440;">
+                <div style="width:32%;background:#88c0d0;"></div>
+              </div>
+              <span style="font-size:12.5px;font-weight:600;">Nordic Frost</span>
+            </div>
+            <div class="theme-card @THEME_GRUVBOX@" onclick="setTheme('gruvbox')">
+              <div class="theme-preview" style="background:#282828;">
+                <div style="width:32%;background:#fe8019;"></div>
+              </div>
+              <span style="font-size:12.5px;font-weight:600;">Gruvbox Dark</span>
+            </div>
+            <div class="theme-card @THEME_MINIMAL@" onclick="setTheme('minimal')">
+              <div class="theme-preview" style="background:#121212;">
+                <div style="width:32%;background:#ffffff;"></div>
+              </div>
+              <span style="font-size:12.5px;font-weight:600;">Minimal OLED</span>
             </div>
             <div class="theme-card @THEME_LIGHT@" onclick="setTheme('light')">
               <div class="theme-preview" style="background:#eff1f5;">
-                <div style="width:30%;background:#1e66f5;"></div>
+                <div style="width:32%;background:#1e66f5;"></div>
               </div>
-              <span style="font-size:12px;">Light</span>
-            </div>
-            <div class="theme-card @THEME_MINIMAL@" onclick="setTheme('minimal')">
-              <div class="theme-preview" style="background:#0a0a0c;">
-                <div style="width:30%;background:#a6adc8;"></div>
-              </div>
-              <span style="font-size:12px;">Minimal</span>
+              <span style="font-size:12.5px;font-weight:600;">Catppuccin Latte</span>
             </div>
           </div>
         </div>
@@ -323,45 +445,45 @@
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Warna Aksen</div>
-              <div class="setting-desc">Warna indikator tab aktif dan fokus tombol</div>
+              <div class="setting-desc">Warna indikator tab aktif, fokus URL bar, dan tombol utama</div>
             </div>
             <input type="color" value="@ACCENT@" onchange="setAccent(this.value)">
           </div>
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Transparansi Latar</div>
-              <div class="setting-desc">Tingkat opasitas chrome browser di Hyprland (@OPACITY_PCT@%)</div>
+              <div class="setting-desc">Tingkat opasitas jendela browser (<span id="opVal">@OPACITY_PCT@%</span>)</div>
             </div>
-            <input type="range" min="20" max="100" value="@OPACITY_PCT@" oninput="setOpacity(this.value)">
+            <input type="range" min="20" max="100" value="@OPACITY_PCT@" oninput="document.getElementById('opVal').textContent=this.value+'%';" onchange="setOpacity(this.value)">
           </div>
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Posisi Tab Bar</div>
-              <div class="setting-desc">Tata letak tab navigasi</div>
+              <div class="setting-desc">Tata letak bar tab di bagian atas, bawah, atau tersembunyi (Zen Mode)</div>
             </div>
             <select onchange="setTabPos(this.value)">
-              <option value="top" @OPT_TOP@>Atas (Chrome standar)</option>
-              <option value="bottom" @OPT_BOTTOM@>Bawah</option>
-              <option value="hidden" @OPT_HIDDEN@>Tersembunyi</option>
+              <option value="top" @OPT_TOP@>Atas (Standar)</option>
+              <option value="bottom" @OPT_BOTTOM@>Bawah (Ergonomis)</option>
+              <option value="hidden" @OPT_HIDDEN@>Tersembunyi (Fokus Penuh)</option>
             </select>
           </div>
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Kepadatan UI</div>
-              <div class="setting-desc">Tinggi tab bar dan ukuran padding tombol</div>
+              <div class="setting-desc">Ukuran ruang padding pada tab bar dan bilah navigasi</div>
             </div>
             <select onchange="setDensity(this.value)">
-              <option value="comfortable" @OPT_COMFORTABLE@>Nyaman (Zen Browser style)</option>
-              <option value="compact" @OPT_COMPACT@>Padat (Minimal)</option>
+              <option value="comfortable" @OPT_COMFORTABLE@>Nyaman (Comfortable)</option>
+              <option value="compact" @OPT_COMPACT@>Padat (Compact)</option>
             </select>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-header">Elemen Halaman Tab Baru (Home)</div>
+          <div class="card-header">Elemen Halaman Tab Baru (Start Page)</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Jam Digital & Tanggal</div>
+              <div class="setting-title">Jam Digital &amp; Sambutan Waktu</div>
             </div>
             <label class="switch">
               <input type="checkbox" @CHK_CLOCK@ onchange="toggleHomeElem('clock', this.checked)">
@@ -370,7 +492,7 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Bilah Pencarian</div>
+              <div class="setting-title">Bilah Pencarian &amp; Pintasan Bang</div>
             </div>
             <label class="switch">
               <input type="checkbox" @CHK_SEARCH@ onchange="toggleHomeElem('search', this.checked)">
@@ -379,7 +501,7 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Shortcut Tiles (Favicon)</div>
+              <div class="setting-title">Shortcut Tiles (Akses Cepat)</div>
             </div>
             <label class="switch">
               <input type="checkbox" @CHK_TILES@ onchange="toggleHomeElem('tiles', this.checked)">
@@ -391,33 +513,101 @@
 
       <!-- PENCARIAN -->
       <div id="search" class="tab-pane">
-        <h2>Pencarian</h2>
+        <h2>Mesin Pencari</h2>
+        <p class="pane-sub">Pilih mesin pencari utama atau gunakan bang prefix langsung dari URL bar.</p>
         <div class="card">
           <div class="card-header">Mesin Pencari Default</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Pilihan Mesin Pencari</div>
-              <div class="setting-desc">Digunakan saat melakukan pencarian dari address bar</div>
+              <div class="setting-title">Mesin Pencari Aktif</div>
+              <div class="setting-desc">Digunakan saat mengetik kueri di URL bar atau halaman Tab Baru</div>
             </div>
             <select onchange="setSearchEngine(this.value)">
-              <option value="google" @ENGINE_GOOGLE@>Google</option>
-              <option value="duckduckgo" @ENGINE_DDG@>DuckDuckGo</option>
+              <option value="google" @ENGINE_GOOGLE@>Google Search</option>
+              <option value="duckduckgo" @ENGINE_DDG@>DuckDuckGo HTML (Hemat RAM)</option>
             </select>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">Pintasan Bang di Address Bar</div>
+          <div class="setting-desc" style="line-height:1.7;">
+            Ketik awalan berikut di URL bar atau kotak pencarian Tab Baru:<br>
+            • <code>!g kata kunci</code> — Cari langsung di Google<br>
+            • <code>!d kata kunci</code> — Cari langsung di DuckDuckGo<br>
+            • <code>!gh repo</code> — Cari repositori di GitHub<br>
+            • <code>!yt video</code> — Cari video di YouTube<br>
+            • <code>!w topik</code> — Cari artikel di Wikipedia
           </div>
         </div>
       </div>
 
       <!-- PRIVASI -->
       <div id="privacy" class="tab-pane">
-        <h2>Privasi & Adblock</h2>
+        <h2>Privasi &amp; Keamanan</h2>
+        <p class="pane-sub">Kontrol pemblokir iklan uBlock Origin berbasis Rust serta data penjelajahan lokal.</p>
         <div class="card">
-          <div class="card-header">uBlock Origin Engine</div>
+          <div class="card-header">uBlock Origin Engine (Rust Native)</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Pemblokir Iklan & Pelacak Aktif</div>
-              <div class="setting-desc">Memfilter request di level Rust sebelum menyentuh jaringan</div>
+              <div class="setting-title">Pemblokir Iklan &amp; Pelacak</div>
+              <div class="setting-desc">Memfilter request iklan dan tracker sebelum menyentuh jaringan</div>
             </div>
-            <span style="color:#A6E3A1;font-weight:600;font-size:13px;">Aktif (uBlock Core)</span>
+            <div style="display:flex;gap:8px;">
+              <button class="btn" onclick="triggerAction('adblock_enable', { val: '1' })">Aktifkan</button>
+              <button class="btn btn-secondary" onclick="triggerAction('adblock_enable', { val: '0' })">Nonaktifkan</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Lencana Penghitung Blokir (Badge)</div>
+              <div class="setting-desc">Tampilkan jumlah elemen yang diblokir di sebelah kanan URL bar</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-secondary" onclick="triggerAction('adblock_badge', { val: '1' })">Tampilkan</button>
+              <button class="btn btn-secondary" onclick="triggerAction('adblock_badge', { val: '0' })">Sembunyikan</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">Data Penjelajahan</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Bersihkan Riwayat Kunjungan</div>
+              <div class="setting-desc">Hapus seluruh catatan di <code>history.json</code></div>
+            </div>
+            <button class="btn btn-secondary" onclick="triggerAction('clear_history', {})">🗑️ Hapus Riwayat</button>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Bersihkan HTTP Cache</div>
+              <div class="setting-desc">Kosongkan cache memori dan disk WebEngine</div>
+            </div>
+            <button class="btn btn-secondary" onclick="triggerAction('clear_cache', {})">🧹 Bersihkan Cache</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SHORTCUTS -->
+      <div id="shortcuts" class="tab-pane">
+        <h2>Pintasan Keyboard</h2>
+        <p class="pane-sub">Navigasi cepat tanpa melepas tangan dari keyboard.</p>
+        <div class="card">
+          <div class="card-header">Daftar Pintasan Utama</div>
+          <div class="shortcut-grid">
+            <div class="shortcut-item"><span>Tab Baru</span><span class="kbd">Ctrl + T</span></div>
+            <div class="shortcut-item"><span>Tab Penyamaran (Private)</span><span class="kbd">Ctrl + Shift + N</span></div>
+            <div class="shortcut-item"><span>Tutup Tab Aktif</span><span class="kbd">Ctrl + W</span></div>
+            <div class="shortcut-item"><span>Pulihkan Tab Tertutup</span><span class="kbd">Ctrl + Shift + T</span></div>
+            <div class="shortcut-item"><span>Fokus Address Bar</span><span class="kbd">Ctrl + L</span></div>
+            <div class="shortcut-item"><span>Cari di Halaman (Find Bar)</span><span class="kbd">Ctrl + F</span></div>
+            <div class="shortcut-item"><span>Tambah / Hapus Bookmark</span><span class="kbd">Ctrl + D</span></div>
+            <div class="shortcut-item"><span>Daftar Bookmark</span><span class="kbd">Ctrl + B</span></div>
+            <div class="shortcut-item"><span>Riwayat Penjelajahan</span><span class="kbd">Ctrl + H</span></div>
+            <div class="shortcut-item"><span>Folder Unduhan</span><span class="kbd">Ctrl + J</span></div>
+            <div class="shortcut-item"><span>Mode Minimal (Toggle Nav)</span><span class="kbd">Ctrl + M</span></div>
+            <div class="shortcut-item"><span>Layar Penuh</span><span class="kbd">F11</span></div>
           </div>
         </div>
       </div>
@@ -425,36 +615,37 @@
       <!-- LANJUTAN -->
       <div id="advanced" class="tab-pane">
         <h2>Kustomisasi Lanjutan</h2>
+        <p class="pane-sub">Edit token warna secara spesifik atau tambahkan aturan Qt Style Sheet (QSS) kustom.</p>
         <div class="card">
-          <div class="card-header">Token Warna Hex / RGBA</div>
+          <div class="card-header">Token Warna Hex</div>
           <div class="setting-row">
             <span>Background</span>
-            <input type="text" id="token_bg" value="@BG@" style="width:140px;">
+            <input type="text" id="token_bg" value="@BG@" style="width:150px;">
           </div>
           <div class="setting-row">
             <span>Surface</span>
-            <input type="text" id="token_surface" value="@SURFACE@" style="width:140px;">
+            <input type="text" id="token_surface" value="@SURFACE@" style="width:150px;">
           </div>
           <div class="setting-row">
             <span>Text / Foreground</span>
-            <input type="text" id="token_fg" value="@FG@" style="width:140px;">
+            <input type="text" id="token_fg" value="@FG@" style="width:150px;">
           </div>
           <div class="setting-row">
             <span>Accent</span>
-            <input type="text" id="token_accent" value="@ACCENT@" style="width:140px;">
+            <input type="text" id="token_accent" value="@ACCENT@" style="width:150px;">
           </div>
           <div class="setting-row">
             <span>Border</span>
-            <input type="text" id="token_border" value="@BORDER@" style="width:140px;">
+            <input type="text" id="token_border" value="@BORDER@" style="width:150px;">
           </div>
           <button class="btn" onclick="saveTokens()">Terapkan Token Warna</button>
         </div>
 
         <div class="card">
-          <div class="card-header">Custom QSS & CSS</div>
-          <textarea id="customQssBox" placeholder="/* Masukkan style QSS / CSS custom di sini */">@CUSTOM_QSS@</textarea>
+          <div class="card-header">Custom Chrome QSS (<code>user_chrome.qss</code>)</div>
+          <textarea id="customQssBox" placeholder="/* Masukkan style QSS custom untuk antarmuka Qt di sini */">@CUSTOM_QSS@</textarea>
           <div style="display:flex;gap:10px;">
-            <button class="btn" onclick="applyCustomQss()">Terapkan Custom Style</button>
+            <button class="btn" onclick="applyCustomQss()">Terapkan Custom QSS</button>
             <button class="btn btn-secondary" onclick="resetDefaults()">Reset ke Pengaturan Awal</button>
           </div>
         </div>
@@ -462,17 +653,32 @@
     </div>
   </div>
 
+  <div id="toast" class="toast">Pengaturan disimpan</div>
+
   <script>
-    function switchTab(id) {
-      document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
-      event.currentTarget.classList.add('active');
+    function showToast(msg) {
+      var t = document.getElementById('toast');
+      if (!t) return;
+      t.textContent = msg || 'Pengaturan diterapkan';
+      t.classList.add('show');
+      setTimeout(function() { t.classList.remove('show'); }, 1800);
+    }
+
+    function switchTab(id, btn) {
+      document.querySelectorAll('.tab-pane').forEach(function(el) { el.classList.remove('active'); });
+      document.querySelectorAll('.nav-btn').forEach(function(el) { el.classList.remove('active'); });
+      var target = document.getElementById(id);
+      if (target) target.classList.add('active');
+      if (btn) btn.classList.add('active');
     }
 
     function triggerAction(action, params) {
-      var qs = Object.keys(params).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k])).join('&');
-      fetch('falkon-action://' + action + '?' + qs).catch(e => console.log(e));
+      var qs = Object.keys(params || {}).map(function(k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+      }).join('&');
+      var url = 'falkon-set://' + action + (qs ? ('?' + qs) : '');
+      showToast('Pengaturan diterapkan');
+      window.location.href = url;
     }
 
     function setTheme(name) { triggerAction('theme', { val: name }); }
@@ -481,7 +687,7 @@
     function setTabPos(pos) { triggerAction('tab_position', { val: pos }); }
     function setDensity(den) { triggerAction('ui_density', { val: den }); }
     function toggleHomeElem(elem, val) { triggerAction('home_toggle', { element: elem, val: val ? '1' : '0' }); }
-    function setSearchEngine(eng) { triggerAction('search_engine', { val: eng }); }
+    function setSearchEngine(eng) { triggerAction('engine', { val: eng }); }
     function saveHomepage(hp) { triggerAction('homepage', { val: hp }); }
     function saveZoom(z) { triggerAction('zoom', { val: z }); }
 
@@ -502,7 +708,7 @@
 
     function resetDefaults() {
       if (confirm('Pulihkan semua pengaturan browser ke kondisi awal?')) {
-        triggerAction('reset', {});
+        triggerAction('reset_defaults', {});
       }
     }
   </script>

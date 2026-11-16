@@ -8,13 +8,16 @@ pub type BrowserHandle = *mut c_void;
 pub type RustBlockCallback = extern "C" fn(*const c_char, c_int, *const c_char) -> bool;
 pub type RustTabCallback = extern "C" fn(c_int, *const c_char, *const c_char);
 pub type RustTabCloseCallback = extern "C" fn(c_int);
+pub type RustTabMoveCallback = extern "C" fn(c_int, c_int);
 
 extern "C" {
     pub fn browser_create(title: *const c_char, width: c_int, height: c_int) -> BrowserHandle;
     pub fn browser_set_block_callback(cb: RustBlockCallback);
     pub fn browser_set_tab_callback(handle: BrowserHandle, cb: RustTabCallback);
     pub fn browser_set_tab_close_callback(handle: BrowserHandle, cb: RustTabCloseCallback);
+    pub fn browser_set_tab_move_callback(handle: BrowserHandle, cb: RustTabMoveCallback);
     pub fn browser_add_tab(handle: BrowserHandle, raw_url: *const c_char) -> c_int;
+    pub fn browser_add_private_tab(handle: BrowserHandle, raw_url: *const c_char) -> c_int;
     pub fn browser_close_tab(handle: BrowserHandle, index: c_int);
     pub fn browser_switch_tab(handle: BrowserHandle, index: c_int);
     pub fn browser_navigate(handle: BrowserHandle, raw_url: *const c_char);
@@ -31,7 +34,11 @@ extern "C" {
         show_new_tab_button: bool,
         default_zoom: f32,
     );
-    pub fn browser_set_theme(handle: BrowserHandle, theme_name: *const c_char, custom_qss: *const c_char);
+    pub fn browser_set_theme(
+        handle: BrowserHandle,
+        theme_name: *const c_char,
+        custom_qss: *const c_char,
+    );
     pub fn browser_set_colors(
         handle: BrowserHandle,
         bg_color: *const c_char,
@@ -75,6 +82,12 @@ impl BrowserApp {
         }
     }
 
+    pub fn set_tab_move_callback(&self, cb: RustTabMoveCallback) {
+        unsafe {
+            browser_set_tab_move_callback(self.handle, cb);
+        }
+    }
+
     pub fn configure_ui_ux(
         &self,
         tab_position: i32,
@@ -112,7 +125,12 @@ impl BrowserApp {
         let c_fg = CString::new(fg).unwrap_or_else(|_| CString::new("#cdd6f4").unwrap());
         let c_accent = CString::new(accent).unwrap_or_else(|_| CString::new("#89b4fa").unwrap());
         unsafe {
-            browser_set_colors(self.handle, c_bg.as_ptr(), c_fg.as_ptr(), c_accent.as_ptr());
+            browser_set_colors(
+                self.handle,
+                c_bg.as_ptr(),
+                c_fg.as_ptr(),
+                c_accent.as_ptr(),
+            );
         }
     }
 
@@ -125,6 +143,11 @@ impl BrowserApp {
     pub fn add_tab(&self, url: &str) -> i32 {
         let c_url = CString::new(url).unwrap_or_else(|_| CString::new("").unwrap());
         unsafe { browser_add_tab(self.handle, c_url.as_ptr()) }
+    }
+
+    pub fn add_private_tab(&self, url: &str) -> i32 {
+        let c_url = CString::new(url).unwrap_or_else(|_| CString::new("").unwrap());
+        unsafe { browser_add_private_tab(self.handle, c_url.as_ptr()) }
     }
 
     pub fn navigate(&self, url: &str) {

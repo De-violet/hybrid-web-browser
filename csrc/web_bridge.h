@@ -13,12 +13,15 @@ typedef void* BrowserHandle;
 typedef bool (*RustBlockCallback)(const char* url, int resource_type, const char* source_url);
 typedef void (*RustTabCallback)(int tab_index, const char* url, const char* title);
 typedef void (*RustTabCloseCallback)(int tab_index);
+typedef void (*RustTabMoveCallback)(int from_index, int to_index);
 
 BrowserHandle browser_create(const char* title, int width, int height);
 void browser_set_block_callback(RustBlockCallback cb);
 void browser_set_tab_callback(BrowserHandle handle, RustTabCallback cb);
 void browser_set_tab_close_callback(BrowserHandle handle, RustTabCloseCallback cb);
+void browser_set_tab_move_callback(BrowserHandle handle, RustTabMoveCallback cb);
 int browser_add_tab(BrowserHandle handle, const char* url);
+int browser_add_private_tab(BrowserHandle handle, const char* url);
 void browser_close_tab(BrowserHandle handle, int index);
 void browser_switch_tab(BrowserHandle handle, int index);
 void browser_navigate(BrowserHandle handle, const char* url);
