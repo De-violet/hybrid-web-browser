@@ -81,7 +81,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $appDir = "dist\Falkon-Rust"
+          $appDir = "dist\falkon-rust-windows-x86_64"
           New-Item -ItemType Directory -Force -Path $appDir
           Copy-Item target\release\falkon-rust.exe -Destination $appDir\
           Copy-Item README.md -Destination $appDir\
@@ -125,18 +125,8 @@ jobs:
             Copy-Item -Recurse -Force "$qtDir\plugins\*" -Destination "$appDir\plugins\"
           }
           
-          # Compile Inno Setup Windows Installer (.exe setup wizard)
-          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          if (Test-Path $iscc) {
-            & $iscc installer.iss
-          } else {
-            Write-Warning "Inno Setup compiler not found"
-          }
-          
-          # Create standalone zip package (strictly encapsulates everything inside Falkon-Rust/ root folder)
-          New-Item -ItemType Directory -Force -Path dist\bundle\Falkon-Rust
-          Copy-Item -Recurse -Force "$appDir\*" -Destination "dist\bundle\Falkon-Rust\"
-          Compress-Archive -Path "dist\bundle\Falkon-Rust" -DestinationPath "dist\falkon-rust-windows-x86_64.zip" -Force
+          # Create standalone zip package (encapsulates everything neatly inside falkon-rust-windows-x86_64 folder)
+          Compress-Archive -Path dist\falkon-rust-windows-x86_64 -DestinationPath dist\falkon-rust-windows-x86_64.zip -Force
 
       # ---------------- Upload Artifacts ----------------
       - name: Upload Artifacts
@@ -154,7 +144,6 @@ jobs:
           files: |
             dist/falkon-rust-linux-x86_64
             dist/falkon-rust-linux-x86_64.tar.gz
-            dist/falkon-rust-windows-setup.exe
             dist/falkon-rust-windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
