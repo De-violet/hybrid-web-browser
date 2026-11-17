@@ -107,6 +107,16 @@ impl TabManager {
         self.tabs.get(index)
     }
 
+    /// Snapshot semua tab (untuk penyimpanan sesi).
+    pub fn all_tabs(&self) -> Vec<TabItem> {
+        self.tabs.clone()
+    }
+
+    /// Indeks tab aktif saat ini.
+    pub fn active_index(&self) -> usize {
+        self.active_index
+    }
+
     pub fn count(&self) -> usize {
         self.tabs.len()
     }
