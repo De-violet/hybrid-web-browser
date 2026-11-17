@@ -134,10 +134,7 @@ impl HistoryManager {
     }
 
     pub fn list(&self) -> Vec<HistoryEntry> {
-        self.entries
-            .lock()
-            .map(|e| e.clone())
-            .unwrap_or_default()
+        self.entries.lock().map(|e| e.clone()).unwrap_or_default()
     }
 }
 
