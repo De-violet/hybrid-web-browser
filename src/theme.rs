@@ -63,7 +63,11 @@ pub fn generate_qss(
     };
 
     let bg_rgba = format!("rgba({}, {}, {}, {:.2})", r, g, b, op);
-    let surface_col = if surface.is_empty() { "#1e1e2e" } else { surface };
+    let surface_col = if surface.is_empty() {
+        "#1e1e2e"
+    } else {
+        surface
+    };
     let fg_col = if fg.is_empty() { "#cdd6f4" } else { fg };
     let accent_col = if accent.is_empty() { "#89b4fa" } else { accent };
     let border_col = if border.is_empty() { "#313244" } else { border };
@@ -247,8 +251,11 @@ QMenu::separator {{
 
 // ---------------- C FFI Export ----------------
 
+/// # Safety
+/// Semua argumen pointer harus null atau menunjuk string C valid yang
+/// null-terminated. Hanya dipanggil dari C++ bridge.
 #[no_mangle]
-pub extern "C" fn rust_get_theme_qss(
+pub unsafe extern "C" fn rust_get_theme_qss(
     bg: *const c_char,
     surface: *const c_char,
     fg: *const c_char,
