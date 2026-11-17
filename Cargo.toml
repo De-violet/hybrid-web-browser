@@ -1,7 +1,14 @@
 [package]
 name = "falkon-rust"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+description = "Browser web minimalis hemat RAM: Rust + Qt6 WebEngine dengan pemblokir iklan EasyList/uBlock, Smart Memory tab suspension, dan mode penyamaran."
+license = "GPL-3.0-only"
+repository = "https://github.com/De-violet/web-browser"
+homepage = "https://github.com/De-violet/web-browser"
+keywords = ["browser", "webengine", "adblock", "qt6", "rust"]
+categories = ["gui"]
+readme = "README.md"
 
 [lib]
 name = "falkon_rust"
