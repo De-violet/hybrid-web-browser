@@ -1,6 +1,7 @@
 #include "web_bridge.h"
 
 #include <QString>
+#include <QStringList>
 #include <QApplication>
 #include <QColor>
 #include <QMainWindow>
@@ -66,6 +67,8 @@ extern "C" {
     );
     char* rust_get_cosmetic_css(const char* url);
     void rust_set_adblock_enabled(bool enabled);
+    void rust_update_filters_async();
+    void rust_set_allowlist(const char* csv);
     void rust_clear_history();
     void rust_free_c_str(char* ptr);
 }
@@ -181,6 +184,15 @@ struct BrowserContext {
     bool showHomeSearch = true;
     bool showHomeTiles = true;
     bool showHomeClock = true;
+
+    // Hemat RAM & sesi (dapat diubah dari Pengaturan, tersimpan di config.json)
+    bool suspendEnabled = true;
+    int suspendAfterSecs = 120;
+    int suspendManySecs = 45;
+    int suspendManyThreshold = 3;
+    int httpCacheSizeMb = 20;
+    bool restoreSession = true;
+    bool filterAutoUpdate = true;
 };
 
 static int create_tab_internal(BrowserContext *ctx, const char* raw_url, bool is_private);
@@ -473,9 +485,11 @@ static void adjust_zoom(BrowserContext *ctx, float delta) {
     }
 }
 
-// Smart Memory: discard/suspend inactive background tabs unless playing audio/video
+// Smart Memory: discard/suspend inactive background tabs unless playing audio/video.
+// Ambang waktu & jumlah tab dapat diubah dari Pengaturan (config.json).
 static void run_smart_memory_cleanup(BrowserContext *ctx) {
     if (!ctx || !ctx->tabBar || !ctx->viewStack || ctx->tabs.size() <= 1) return;
+    if (!ctx->suspendEnabled) return;
 
     int activeIdx = ctx->tabBar->currentIndex();
     qint64 now = QDateTime::currentSecsSinceEpoch();
@@ -489,14 +503,17 @@ static void run_smart_memory_cleanup(BrowserContext *ctx) {
 
         auto &meta = ctx->tabs[i];
         if (meta.isSuspended) continue;
+        if (!meta.view || !meta.view->page()) continue;
 
         // Streaming audio/video protection: NEVER suspend playing media
-        if (meta.view && meta.view->page() && meta.view->page()->recentlyAudible()) {
+        if (meta.view->page()->recentlyAudible()) {
             continue;
         }
 
-        // Suspend tabs inactive for > 120s or if total tabs > 3
-        if ((now - meta.lastActive > 120) || (ctx->tabs.size() > 3 && now - meta.lastActive > 45)) {
+        // Suspend lebih cepat saat tab terbuka melebihi ambang (banyak tab).
+        bool manyTabs = static_cast<int>(ctx->tabs.size()) > ctx->suspendManyThreshold;
+        qint64 threshold = manyTabs ? ctx->suspendManySecs : ctx->suspendAfterSecs;
+        if (now - meta.lastActive > threshold) {
             QString currentUrl = meta.view->url().toString();
             if (!currentUrl.isEmpty() && currentUrl != "about:blank" && currentUrl != "falkon:home" && currentUrl != "falkon:settings") {
                 meta.savedUrl = currentUrl;
@@ -1062,6 +1079,13 @@ static void save_browser_config(BrowserContext *ctx, const QString &homepage = "
     root["show_home_search"] = ctx->showHomeSearch;
     root["show_home_tiles"] = ctx->showHomeTiles;
     root["show_home_clock"] = ctx->showHomeClock;
+    root["suspend_enabled"] = ctx->suspendEnabled;
+    root["suspend_after_seconds"] = ctx->suspendAfterSecs;
+    root["suspend_many_tabs_after_seconds"] = ctx->suspendManySecs;
+    root["suspend_many_tabs_threshold"] = ctx->suspendManyThreshold;
+    root["http_cache_size_mb"] = ctx->httpCacheSizeMb;
+    root["restore_session"] = ctx->restoreSession;
+    root["filter_auto_update"] = ctx->filterAutoUpdate;
     if (ctx->window) {
         root["window_width"] = ctx->window->width();
         root["window_height"] = ctx->window->height();
@@ -1126,6 +1150,30 @@ static QString generate_settings_page_html(BrowserContext *ctx) {
 }
 
 static void open_settings_tab(BrowserContext *ctx);
+
+static void save_allowlist_config(BrowserContext *ctx, const QString &csv) {
+    if (!ctx) return;
+    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/config.json";
+    QJsonObject root;
+    QFile rf(configPath);
+    if (rf.open(QIODevice::ReadOnly)) {
+        QJsonDocument d = QJsonDocument::fromJson(rf.readAll());
+        if (d.isObject()) root = d.object();
+        rf.close();
+    }
+    QJsonArray arr;
+    const QStringList parts = csv.split(',', Qt::SkipEmptyParts);
+    for (const QString &part : parts) {
+        QString domain = part.trimmed().toLower();
+        if (!domain.isEmpty()) arr.append(domain);
+    }
+    root["adblock_allowlist"] = arr;
+    QFile wf(configPath);
+    if (wf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        wf.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        wf.close();
+    }
+}
 
 static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
     if (!ctx) return;
@@ -1217,6 +1265,13 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         ctx->showHomeClock = true;
         ctx->showHomeSearch = true;
         ctx->showHomeTiles = true;
+        ctx->suspendEnabled = true;
+        ctx->suspendAfterSecs = 120;
+        ctx->suspendManySecs = 45;
+        ctx->suspendManyThreshold = 3;
+        ctx->httpCacheSizeMb = 20;
+        ctx->restoreSession = true;
+        ctx->filterAutoUpdate = true;
         ctx->customChromeQss = "";
         QString userQssPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/user_chrome.qss";
         QFile::remove(userQssPath);
@@ -1270,6 +1325,43 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
     } else if (action == "clear_cache") {
         QWebEngineProfile::defaultProfile()->clearHttpCache();
         show_status_toast(ctx, "HTTP Cache berhasil dibersihkan", 2000);
+    } else if (action == "filter_update") {
+        rust_update_filters_async();
+        show_status_toast(ctx, "Memperbarui daftar filter di latar belakang...", 2500);
+    } else if (action == "filter_auto") {
+        ctx->filterAutoUpdate = (q.queryItemValue("val") == "1");
+        save_browser_config(ctx);
+    } else if (action == "restore_session") {
+        ctx->restoreSession = (q.queryItemValue("val") == "1");
+        save_browser_config(ctx);
+    } else if (action == "suspend_toggle") {
+        ctx->suspendEnabled = (q.queryItemValue("val") == "1");
+        save_browser_config(ctx);
+        show_status_toast(ctx, ctx->suspendEnabled ? "Smart Memory diaktifkan" : "Smart Memory dinonaktifkan", 2000);
+    } else if (action == "suspend_timeout") {
+        int secs = q.queryItemValue("val").toInt();
+        if (secs >= 30 && secs <= 3600) {
+            ctx->suspendAfterSecs = secs;
+            save_browser_config(ctx);
+        }
+    } else if (action == "suspend_many") {
+        int secs = q.queryItemValue("secs").toInt();
+        int threshold = q.queryItemValue("threshold").toInt();
+        if (secs >= 15 && secs <= 600) ctx->suspendManySecs = secs;
+        if (threshold >= 1 && threshold <= 20) ctx->suspendManyThreshold = threshold;
+        save_browser_config(ctx);
+    } else if (action == "cache_size") {
+        int mb = q.queryItemValue("val").toInt();
+        if (mb >= 4 && mb <= 512) {
+            ctx->httpCacheSizeMb = mb;
+            QWebEngineProfile::defaultProfile()->setHttpCacheMaximumSize(static_cast<qint64>(mb) * 1024 * 1024);
+            save_browser_config(ctx);
+        }
+    } else if (action == "allowlist_save") {
+        QString csv = q.queryItemValue("val", QUrl::FullyDecoded).trimmed();
+        save_allowlist_config(ctx, csv);
+        rust_set_allowlist(csv.toUtf8().constData());
+        show_status_toast(ctx, "Allowlist adblock disimpan", 2000);
     } else if (action == "smart_memory") {
         run_smart_memory_cleanup(ctx);
     }
@@ -1473,6 +1565,13 @@ BrowserHandle browser_create(const char* title, int width, int height) {
                 ctx->useGoogleSearch = se.contains("google", Qt::CaseInsensitive);
             }
             if (o.contains("download_dir")) ctx->downloadDir = o["download_dir"].toString();
+            if (o.contains("suspend_enabled")) ctx->suspendEnabled = o["suspend_enabled"].toBool(true);
+            if (o.contains("suspend_after_seconds")) ctx->suspendAfterSecs = std::max(30, std::min(3600, o["suspend_after_seconds"].toInt(120)));
+            if (o.contains("suspend_many_tabs_after_seconds")) ctx->suspendManySecs = std::max(15, std::min(600, o["suspend_many_tabs_after_seconds"].toInt(45)));
+            if (o.contains("suspend_many_tabs_threshold")) ctx->suspendManyThreshold = std::max(1, std::min(20, o["suspend_many_tabs_threshold"].toInt(3)));
+            if (o.contains("http_cache_size_mb")) ctx->httpCacheSizeMb = std::max(4, std::min(512, o["http_cache_size_mb"].toInt(20)));
+            if (o.contains("restore_session")) ctx->restoreSession = o["restore_session"].toBool(true);
+            if (o.contains("filter_auto_update")) ctx->filterAutoUpdate = o["filter_auto_update"].toBool(true);
         }
         rf.close();
     }
@@ -1489,7 +1588,7 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     profile->setPersistentStoragePath(configPath + "/storage");
     profile->setPersistentCookiesPolicy(QWebEngineProfile::AllowPersistentCookies);
     profile->setHttpCacheType(QWebEngineProfile::MemoryHttpCache);
-    profile->setHttpCacheMaximumSize(20 * 1024 * 1024);
+    profile->setHttpCacheMaximumSize(static_cast<qint64>(ctx->httpCacheSizeMb) * 1024 * 1024);
 
     // Off-the-record profile for Private / Incognito tabs
     ctx->privateProfile = new QWebEngineProfile(ctx->window);
