@@ -1,4 +1,4 @@
-name: Build and Release Falkon-Rust
+name: Build and Release Attis
 
 on:
   push:
@@ -12,8 +12,43 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    name: Test (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            qt6-base-dev \
+            qt6-webengine-dev \
+            libqt6svg6-dev
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets
+
+      - name: Run tests
+        run: cargo test
+
   build:
     name: Build (${{ matrix.os }})
+    needs: test
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -54,12 +89,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p dist/bundle
-          cp target/release/falkon-rust dist/falkon-rust-linux-x86_64
-          cp target/release/falkon-rust dist/bundle/
+          cp target/release/attis dist/attis-linux-x86_64
+          cp target/release/attis dist/bundle/
           cp README.md dist/bundle/
-          if [ -f falkon-rust.desktop ]; then cp falkon-rust.desktop dist/bundle/; fi
-          if [ -f falkon-rust.svg ]; then cp falkon-rust.svg dist/bundle/; fi
-          tar -czf dist/falkon-rust-linux-x86_64.tar.gz -C dist/bundle .
+          if [ -f attis.desktop ]; then cp attis.desktop dist/bundle/; fi
+          if [ -f attis.svg ]; then cp attis.svg dist/bundle/; fi
+          tar -czf dist/attis-linux-x86_64.tar.gz -C dist/bundle .
 
       # ---------------- Windows Setup ----------------
       - name: Install Qt (Windows)
@@ -81,14 +116,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $appDir = "dist\falkon-rust-windows-x86_64"
+          $appDir = "dist\attis-windows-x86_64"
           New-Item -ItemType Directory -Force -Path $appDir
-          Copy-Item target\release\falkon-rust.exe -Destination $appDir\
+          Copy-Item target\release\attis.exe -Destination $appDir\
           Copy-Item README.md -Destination $appDir\
           
           # Deploy Qt runtime dependencies via windeployqt
           $qtDir = if ($env:QT_ROOT_DIR) { $env:QT_ROOT_DIR } else { $env:QT_DIR }
-          & "$qtDir\bin\windeployqt.exe" --release --compiler-runtime --no-translations "$appDir\falkon-rust.exe"
+          & "$qtDir\bin\windeployqt.exe" --release --compiler-runtime --no-translations "$appDir\attis.exe"
           $global:LASTEXITCODE = 0
           
           # Ensure ALL Qt6 bin DLLs and WebEngine process are present
@@ -125,14 +160,14 @@ jobs:
             Copy-Item -Recurse -Force "$qtDir\plugins\*" -Destination "$appDir\plugins\"
           }
           
-          # Create standalone zip package (encapsulates everything neatly inside falkon-rust-windows-x86_64 folder)
-          Compress-Archive -Path dist\falkon-rust-windows-x86_64 -DestinationPath dist\falkon-rust-windows-x86_64.zip -Force
+          # Create standalone zip package (encapsulates everything neatly inside attis-windows-x86_64 folder)
+          Compress-Archive -Path dist\attis-windows-x86_64 -DestinationPath dist\attis-windows-x86_64.zip -Force
 
       # ---------------- Upload Artifacts ----------------
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: falkon-rust-${{ matrix.artifact_name }}
+          name: attis-${{ matrix.artifact_name }}
           path: dist/*
           if-no-files-found: error
 
@@ -142,8 +177,23 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/falkon-rust-linux-x86_64
-            dist/falkon-rust-linux-x86_64.tar.gz
-            dist/falkon-rust-windows-x86_64.zip
+            dist/attis-linux-x86_64
+            dist/attis-linux-x86_64.tar.gz
+            dist/attis-windows-x86_64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---------------- Rolling Release (every push to main) ----------------
+      - name: Upload to Rolling Release
+        if: github.ref == 'refs/branch/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: Latest development build
+          prerelease: true
+          files: |
+            dist/attis-linux-x86_64
+            dist/attis-linux-x86_64.tar.gz
+            dist/attis-windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
