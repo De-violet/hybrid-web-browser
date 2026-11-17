@@ -1,5 +1,8 @@
+use crate::config::resolve_config_dir;
+use crate::filter_lists::status_summary;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::path::Path;
 
 const START_PAGE_TPL: &str = include_str!("assets/start_page.html");
 const SETTINGS_PAGE_TPL: &str = include_str!("assets/settings_page.html");
@@ -139,12 +142,36 @@ pub fn generate_settings_page_html(
 
     let opacity_pct = (opacity.clamp(0.2, 1.0) * 100.0).round() as i32;
 
-    let z_08 = if (zoom - 0.8).abs() < 0.05 { "selected" } else { "" };
-    let z_09 = if (zoom - 0.9).abs() < 0.05 { "selected" } else { "" };
-    let z_10 = if (zoom - 1.0).abs() < 0.05 { "selected" } else { "" };
-    let z_11 = if (zoom - 1.1).abs() < 0.05 { "selected" } else { "" };
-    let z_125 = if (zoom - 1.25).abs() < 0.05 { "selected" } else { "" };
-    let z_15 = if (zoom - 1.5).abs() < 0.05 { "selected" } else { "" };
+    let z_08 = if (zoom - 0.8).abs() < 0.05 {
+        "selected"
+    } else {
+        ""
+    };
+    let z_09 = if (zoom - 0.9).abs() < 0.05 {
+        "selected"
+    } else {
+        ""
+    };
+    let z_10 = if (zoom - 1.0).abs() < 0.05 {
+        "selected"
+    } else {
+        ""
+    };
+    let z_11 = if (zoom - 1.1).abs() < 0.05 {
+        "selected"
+    } else {
+        ""
+    };
+    let z_125 = if (zoom - 1.25).abs() < 0.05 {
+        "selected"
+    } else {
+        ""
+    };
+    let z_15 = if (zoom - 1.5).abs() < 0.05 {
+        "selected"
+    } else {
+        ""
+    };
 
     let fg_color = sanitize_css_token(fg, "#cdd6f4");
     let accent_color = sanitize_css_token(accent, "#89b4fa");
@@ -154,6 +181,24 @@ pub fn generate_settings_page_html(
 
     let safe_homepage = escape_html(homepage);
     let safe_custom_qss = escape_html(custom_qss);
+    let extras = settings_extras();
+    let chk_filter_auto = if extras.filter_auto_update {
+        "checked"
+    } else {
+        ""
+    };
+    let chk_restore = if extras.restore_session {
+        "checked"
+    } else {
+        ""
+    };
+    let chk_suspend = if extras.suspend_enabled {
+        "checked"
+    } else {
+        ""
+    };
+    let safe_filter_status = escape_html(&extras.filter_status);
+    let safe_allowlist = escape_html(&extras.allowlist);
 
     SETTINGS_PAGE_TPL
         .replace("@FG@", fg_color)
@@ -186,12 +231,110 @@ pub fn generate_settings_page_html(
         .replace("@ZOOM_15@", z_15)
         .replace("@HOMEPAGE@", &safe_homepage)
         .replace("@CUSTOM_QSS@", &safe_custom_qss)
+        .replace("@FILTER_STATUS@", &safe_filter_status)
+        .replace("@CHK_FILTER_AUTO@", chk_filter_auto)
+        .replace("@CHK_RESTORE@", chk_restore)
+        .replace("@CHK_SUSPEND@", chk_suspend)
+        .replace("@SUSPEND_SECS@", &extras.suspend_after_seconds.to_string())
+        .replace(
+            "@SUSPEND_MANY_SECS@",
+            &extras.suspend_many_after_seconds.to_string(),
+        )
+        .replace(
+            "@SUSPEND_THRESHOLD@",
+            &extras.suspend_many_threshold.to_string(),
+        )
+        .replace("@CACHE_MB@", &extras.http_cache_size_mb.to_string())
+        .replace("@ALLOWLIST@", &safe_allowlist)
+}
+
+/// Nilai pengaturan tambahan untuk halaman Pengaturan, dibaca langsung dari
+/// `config.json` dan status filter agar tidak perlu mengubah signature FFI.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SettingsExtras {
+    pub filter_status: String,
+    pub filter_auto_update: bool,
+    pub restore_session: bool,
+    pub suspend_enabled: bool,
+    pub suspend_after_seconds: u64,
+    pub suspend_many_after_seconds: u64,
+    pub suspend_many_threshold: usize,
+    pub http_cache_size_mb: u32,
+    pub allowlist: String,
+}
+
+impl Default for SettingsExtras {
+    fn default() -> Self {
+        Self {
+            filter_status: String::new(),
+            filter_auto_update: true,
+            restore_session: true,
+            suspend_enabled: true,
+            suspend_after_seconds: 120,
+            suspend_many_after_seconds: 45,
+            suspend_many_threshold: 3,
+            http_cache_size_mb: 20,
+            allowlist: String::new(),
+        }
+    }
+}
+
+pub fn settings_extras() -> SettingsExtras {
+    settings_extras_from_dir(&resolve_config_dir())
+}
+
+pub fn settings_extras_from_dir(config_dir: &Path) -> SettingsExtras {
+    let mut extras = SettingsExtras {
+        filter_status: status_summary(config_dir),
+        ..Default::default()
+    };
+    let Ok(content) = std::fs::read_to_string(config_dir.join("config.json")) else {
+        return extras;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return extras;
+    };
+    if let Some(v) = value.get("filter_auto_update").and_then(|v| v.as_bool()) {
+        extras.filter_auto_update = v;
+    }
+    if let Some(v) = value.get("restore_session").and_then(|v| v.as_bool()) {
+        extras.restore_session = v;
+    }
+    if let Some(v) = value.get("suspend_enabled").and_then(|v| v.as_bool()) {
+        extras.suspend_enabled = v;
+    }
+    if let Some(v) = value.get("suspend_after_seconds").and_then(|v| v.as_u64()) {
+        extras.suspend_after_seconds = v;
+    }
+    if let Some(v) = value
+        .get("suspend_many_tabs_after_seconds")
+        .and_then(|v| v.as_u64())
+    {
+        extras.suspend_many_after_seconds = v;
+    }
+    if let Some(v) = value
+        .get("suspend_many_tabs_threshold")
+        .and_then(|v| v.as_u64())
+    {
+        extras.suspend_many_threshold = v as usize;
+    }
+    if let Some(v) = value.get("http_cache_size_mb").and_then(|v| v.as_u64()) {
+        extras.http_cache_size_mb = v as u32;
+    }
+    if let Some(list) = value.get("adblock_allowlist").and_then(|v| v.as_array()) {
+        let domains: Vec<&str> = list.iter().filter_map(|v| v.as_str()).collect();
+        extras.allowlist = domains.join(", ");
+    }
+    extras
 }
 
 // ---------------- C FFI Exports ----------------
 
+/// # Safety
+/// Semua argumen pointer harus null atau menunjuk string C valid yang
+/// null-terminated. Hanya dipanggil dari C++ bridge.
 #[no_mangle]
-pub extern "C" fn rust_get_start_page(
+pub unsafe extern "C" fn rust_get_start_page(
     accent: *const c_char,
     fg: *const c_char,
     is_google: bool,
@@ -223,8 +366,11 @@ pub extern "C" fn rust_get_start_page(
         .unwrap_or(std::ptr::null_mut())
 }
 
+/// # Safety
+/// Semua argumen pointer harus null atau menunjuk string C valid yang
+/// null-terminated. Hanya dipanggil dari C++ bridge.
 #[no_mangle]
-pub extern "C" fn rust_get_settings_page(
+pub unsafe extern "C" fn rust_get_settings_page(
     theme: *const c_char,
     bg: *const c_char,
     surface: *const c_char,
@@ -316,8 +462,11 @@ pub extern "C" fn rust_get_settings_page(
         .unwrap_or(std::ptr::null_mut())
 }
 
+/// # Safety
+/// `ptr` harus null atau pointer yang sebelumnya dikembalikan oleh salah
+/// satu fungsi FFI Rust di crate ini (dan belum pernah dibebaskan).
 #[no_mangle]
-pub extern "C" fn rust_free_c_str(ptr: *mut c_char) {
+pub unsafe extern "C" fn rust_free_c_str(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe {
             let _ = CString::from_raw(ptr);
