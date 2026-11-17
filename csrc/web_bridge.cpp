@@ -37,6 +37,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDesktopServices>
+#include <QEvent>
 #include <QWidgetAction>
 #include <QListWidget>
 #include <QInputDialog>
@@ -1431,9 +1432,12 @@ static void restore_closed_tab(BrowserContext *ctx) {
     show_status_toast(ctx, QString("Tab dipulihkan: %1").arg(last.title), 2000);
 }
 
+static void position_status_overlay(BrowserContext *ctx); // defined below, before browser_create
+
 static void show_status_toast(BrowserContext *ctx, const QString &msg, int timeoutMs) {
     if (!ctx || !ctx->statusBarWidget || !ctx->statusToastLabel) return;
     ctx->statusToastLabel->setText(msg);
+    position_status_overlay(ctx);
     ctx->statusBarWidget->show();
     QTimer::singleShot(timeoutMs, ctx->statusBarWidget, [ctx, msg]() {
         if (ctx->statusToastLabel && ctx->statusToastLabel->text() == msg) {
@@ -1489,6 +1493,40 @@ static void setup_download_handler(BrowserContext *ctx, QWebEngineProfile *profi
         });
     });
 }
+
+// Positions the hover-URL/toast bar as a floating overlay anchored to the
+// bottom-left of the central widget. The bar must NOT live in the main
+// layout: showing/hiding it there resized the web view, so hovering any
+// link made the whole page jump up and down. As an overlay, only the URL
+// appears; the layout never moves.
+static void position_status_overlay(BrowserContext *ctx) {
+    if (!ctx || !ctx->statusBarWidget) return;
+    QWidget *parent = ctx->statusBarWidget->parentWidget();
+    if (!parent) return;
+    const int margin = 8;
+    ctx->statusBarWidget->setMaximumWidth(qMax(200, parent->width() - 2 * margin));
+    ctx->statusBarWidget->adjustSize();
+    const int x = margin;
+    const int y = parent->height() - ctx->statusBarWidget->height() - margin;
+    ctx->statusBarWidget->move(x, qMax(margin, y));
+    ctx->statusBarWidget->raise();
+}
+
+// Keeps the status overlay anchored when the central widget resizes.
+// No signals/slots, so no Q_OBJECT/moc needed.
+class StatusOverlayAnchor : public QObject {
+public:
+    explicit StatusOverlayAnchor(BrowserContext *ctx)
+        : QObject(ctx->statusBarWidget), m_ctx(ctx) {}
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (event->type() == QEvent::Resize) {
+            position_status_overlay(m_ctx);
+        }
+        return QObject::eventFilter(watched, event);
+    }
+private:
+    BrowserContext *m_ctx;
+};
 
 BrowserHandle browser_create(const char* title, int width, int height) {
     // 1. Ultra-Low RAM & Hardware Acceleration Optimization Flags
@@ -1652,6 +1690,11 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     tabRowLayout->addWidget(ctx->newTabBtn);
     tabRowLayout->addStretch();
 
+    // Custom window buttons only on Linux: tiling compositors such as
+    // Hyprland draw no title-bar buttons, so Attis must provide its own.
+    // On Windows/macOS the native frame already has minimize/maximize/
+    // close, and custom buttons would appear doubled.
+#ifdef Q_OS_LINUX
     // Window Control Buttons
     auto *winCtrlWidget = new QWidget(ctx->tabRowWidget);
     winCtrlWidget->setObjectName("winControls");
@@ -1690,6 +1733,7 @@ BrowserHandle browser_create(const char* title, int width, int height) {
         }
     });
     QObject::connect(ctx->winCloseBtn, &QPushButton::clicked, [ctx]() { ctx->window->close(); });
+#endif // Q_OS_LINUX
 
     // Tab Context Menu (Right-click on tab)
     QObject::connect(ctx->tabBar, &QTabBar::customContextMenuRequested, [ctx](const QPoint &pos) {
@@ -1983,13 +2027,19 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     statusLayout->addWidget(ctx->statusHoverLabel, 1);
     statusLayout->addWidget(ctx->statusToastLabel);
     ctx->statusBarWidget->hide();
+    // Overlay behavior: the bar floats above the web view and never takes
+    // part in the layout, so showing it cannot move the page. Clicks pass
+    // through it; it only displays the hovered URL / toast text.
+    ctx->statusBarWidget->setAttribute(Qt::WA_TransparentForMouseEvents);
+    ctx->statusHoverLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    ctx->statusToastLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    centralWidget->installEventFilter(new StatusOverlayAnchor(ctx));
 
     ctx->mainLayout->addWidget(ctx->tabRowWidget);
     ctx->mainLayout->addWidget(ctx->navBar);
     ctx->mainLayout->addWidget(ctx->loadProgressBar);
     ctx->mainLayout->addWidget(ctx->viewStack, 1);
     ctx->mainLayout->addWidget(ctx->findBar);
-    ctx->mainLayout->addWidget(ctx->statusBarWidget);
     ctx->window->setCentralWidget(centralWidget);
 
     // Tab Bar Event Connections
@@ -2190,6 +2240,7 @@ static void attach_view_signals(BrowserContext *ctx, QWebEngineView *view) {
             }
         } else {
             ctx->statusHoverLabel->setText(url);
+            position_status_overlay(ctx);
             ctx->statusBarWidget->show();
         }
     });

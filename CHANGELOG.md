@@ -39,6 +39,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Hovering a link no longer makes the page jump: the hover-URL/toast
+  bar is now a floating overlay anchored to the bottom-left of the
+  window instead of a row in the main layout, so showing it cannot
+  resize the web view. The overlay is click-through and only displays
+  the URL.
+- The custom minimize/maximize/close buttons are now only shown on
+  Linux, where tiling compositors such as Hyprland draw no title-bar
+  buttons. On Windows and macOS the native window frame already
+  provides them, so the custom buttons no longer appear doubled.
 - `renderer_process_limit` in `config.json` is now honored: the C++
   bridge previously overwrote the Chromium flags environment variable
   with a hardcoded `--renderer-process-limit=2`, so the effective
