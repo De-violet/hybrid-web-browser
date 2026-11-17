@@ -185,7 +185,7 @@ jobs:
 
       # ---------------- Rolling Release (every push to main) ----------------
       - name: Upload to Rolling Release
-        if: github.ref == 'refs/branch/main'
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: continuous
