@@ -1,9 +1,9 @@
-use attis::adblock_engine::AdBlockManager;
+use attis::adblock_engine::{read_rule_file_lines, AdBlockManager};
 use attis::bridge::{c_to_str, BrowserApp};
 use attis::config::ConfigManager;
 use attis::filter_lists::{
-    is_stale, list_file_path, load_cached_lists, resolve_sources, status_summary, update_lists,
-    FilterStatus,
+    is_stale, list_file_path, lists_dir, load_cached_lists, resolve_sources, status_summary,
+    update_lists, FilterStatus,
 };
 use attis::history::HistoryManager;
 use attis::session::{load_session, save_session, SessionData};
@@ -265,7 +265,9 @@ fn print_filter_status(status: &FilterStatus) {
 }
 
 /// Terapkan batas proses renderer lewat variabel lingkungan Chromium.
-/// Harus dipanggil SEBELUM QApplication/WebEngine dibuat. Nilai 0 = default.
+/// Harus dipanggil SEBELUM QApplication/WebEngine dibuat. Nilai 0 berarti
+/// jangan setel flag (pemanggil memetakan 0/automatis ke 4 terlebih dahulu
+/// lewat `renderer_process_limit_clamped`).
 /// Nilai yang sudah disetel pengguna di environment tidak ditimpa.
 fn apply_renderer_process_limit(limit: u32) {
     if limit == 0 {
@@ -314,18 +316,26 @@ fn main() {
         &cfg_mgr.config.filter_lists,
         &cfg_mgr.config.custom_filter_urls,
     );
-    let adblock = AdBlockManager::with_lists(
-        &cfg_mgr.config.custom_rules,
+    // Baca custom_rules.txt SEBELUM membangun mesin agar rule file
+    // tergabung dalam satu build (sebelumnya memicu rebuild penuh kedua).
+    let mut extra_rules = cfg_mgr.config.custom_rules.clone();
+    let custom_rules_file = cfg_mgr.dir.join("custom_rules.txt");
+    if let Ok(lines) = read_rule_file_lines(&custom_rules_file) {
+        for line in lines {
+            if !extra_rules.contains(&line) {
+                extra_rules.push(line);
+            }
+        }
+    }
+    // Cache engine terserialisasi di filter_lists/: startup berikutnya
+    // tidak perlu mem-parse ulang puluhan ribu rule bila input tidak berubah.
+    let adblock = AdBlockManager::with_lists_and_cache(
+        &extra_rules,
         cfg_mgr.config.enable_adblock,
         &cached_lists,
         &cfg_mgr.config.adblock_allowlist,
+        &lists_dir(&cfg_mgr.dir),
     );
-
-    // Load custom rules from config directory if present
-    let custom_rules_file = cfg_mgr.dir.join("custom_rules.txt");
-    if custom_rules_file.exists() {
-        let _ = adblock.load_rule_file(&custom_rules_file);
-    }
 
     let mut initial_url = cfg_mgr.config.homepage.clone();
     let mut explicit_url: Option<String> = None;
@@ -445,8 +455,12 @@ fn main() {
 
     let mut tab_manager = TabManager::new();
     if let Some(ref session) = saved_session {
-        for tab in &session.tabs {
+        for (i, tab) in session.tabs.iter().enumerate() {
             tab_manager.add_with_mode(&tab.url, false);
+            // Pertahankan judul tersimpan: tab lazy restore yang belum
+            // dikunjungi tidak pernah memicu callback judul, jadi tanpa
+            // ini judulnya hilang saat sesi disimpan lagi.
+            tab_manager.update(i, &tab.url, &tab.title);
         }
         tab_manager.set_active(session.active_index);
     } else {
@@ -505,8 +519,15 @@ fn main() {
 
     unsafe {
         if let Some(ref session) = saved_session {
-            for tab in &session.tabs {
-                (*app_raw).add_tab(&tab.url);
+            // Lazy restore: hanya tab aktif yang dimuat saat startup; tab
+            // lain dibuat tersuspensi dan dimuat saat pertama diaktifkan.
+            // `load_session` menjamin `active_index` selalu valid.
+            for (i, tab) in session.tabs.iter().enumerate() {
+                if i == session.active_index {
+                    (*app_raw).add_tab(&tab.url);
+                } else {
+                    (*app_raw).add_suspended_tab(&tab.url, &tab.title);
+                }
             }
             (*app_raw).switch_tab(session.active_index as i32);
         } else if start_private {

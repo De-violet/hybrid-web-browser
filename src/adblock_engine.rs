@@ -4,7 +4,7 @@ use adblock::request::Request;
 use adblock::Engine;
 use std::collections::{HashMap, VecDeque};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, RwLock};
 
@@ -186,17 +186,138 @@ fn host_matches_domain(host: &str, domain: &str) -> bool {
 fn build_engine(list_contents: &[String], custom_rules: &[String]) -> (Engine, usize) {
     let mut filter_set = FilterSet::new(false);
     filter_set.add_filter_list(DEFAULT_RULES.to_string(), ParseOptions::default());
-    let mut rule_count = count_rules(DEFAULT_RULES);
     for content in list_contents {
-        rule_count += count_rules(content);
         filter_set.add_filter_list(content.clone(), ParseOptions::default());
     }
     if !custom_rules.is_empty() {
-        let joined = custom_rules.join("\n");
-        rule_count += count_rules(&joined);
-        filter_set.add_filter_list(joined, ParseOptions::default());
+        filter_set.add_filter_list(custom_rules.join("\n"), ParseOptions::default());
     }
-    (Engine::new_with_filter_set(filter_set), rule_count)
+    (
+        Engine::new_with_filter_set(filter_set),
+        count_all_rules(list_contents, custom_rules),
+    )
+}
+
+/// Hitung jumlah rule efektif (bawaan + daftar + kustom) tanpa membangun
+/// mesin — dipakai jalur cache agar `rule_count` tetap akurat saat engine
+/// di-deserialize, bukan di-parse.
+fn count_all_rules(list_contents: &[String], custom_rules: &[String]) -> usize {
+    let mut rule_count = count_rules(DEFAULT_RULES);
+    for content in list_contents {
+        rule_count += count_rules(content);
+    }
+    if !custom_rules.is_empty() {
+        rule_count += count_rules(&custom_rules.join("\n"));
+    }
+    rule_count
+}
+
+/// Normalisasi daftar domain allowlist: duplikat dibuang, urutan stabil.
+fn normalize_allowlist(domains: &[String]) -> Vec<String> {
+    let mut normalized: Vec<String> = domains.iter().filter_map(|d| normalize_domain(d)).collect();
+    normalized.sort();
+    normalized.dedup();
+    normalized
+}
+
+/// Parse isi file rule menjadi daftar rule: tiap baris di-trim, baris
+/// kosong dan komentar (`!`) dibuang. Dipakai `load_rule_file` dan
+/// pemuatan awal `custom_rules.txt` agar perilakunya identik.
+pub fn parse_rule_lines(content: &str) -> Vec<String> {
+    content
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && !l.starts_with('!'))
+        .collect()
+}
+
+/// Baca file rule dari disk dan parse isinya (lihat `parse_rule_lines`).
+pub fn read_rule_file_lines<P: AsRef<Path>>(path: P) -> Result<Vec<String>, String> {
+    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    Ok(parse_rule_lines(&content))
+}
+
+/// Nomor versi format cache engine terserialisasi. Naikkan bila format
+/// berubah agar cache dari format lama tidak pernah dibaca.
+const ENGINE_CACHE_FORMAT_VERSION: u32 = 1;
+/// Magic header file cache engine terserialisasi.
+const ENGINE_CACHE_MAGIC: &[u8; 8] = b"ATTISENG";
+/// Nama file cache engine terserialisasi di direktori `filter_lists/`.
+const ENGINE_CACHE_FILE: &str = "engine_cache.bin";
+
+/// Path file cache engine terserialisasi untuk direktori cache tertentu.
+pub fn engine_cache_path(cache_dir: &Path) -> PathBuf {
+    cache_dir.join(ENGINE_CACHE_FILE)
+}
+
+/// FNV-1a 64-bit: hash deterministik tanpa dependensi baru.
+/// `DefaultHasher` tidak boleh dipakai di sini karena kuncinya acak
+/// per proses, sehingga hash cache tidak stabil antar peluncuran.
+fn fnv1a_update(mut hash: u64, bytes: &[u8]) -> u64 {
+    for &byte in bytes {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+/// Hash deterministik atas semua input pembangun engine: versi format,
+/// rule bawaan, isi daftar filter (sesuai urutan pemuatan), dan rule
+/// kustom. Perubahan apa pun pada input menghasilkan hash berbeda
+/// sehingga cache basi tidak pernah dipakai.
+fn engine_inputs_hash(list_contents: &[String], custom_rules: &[String]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    hash = fnv1a_update(hash, &ENGINE_CACHE_FORMAT_VERSION.to_le_bytes());
+    hash = fnv1a_update(hash, DEFAULT_RULES.as_bytes());
+    for chunk in list_contents.iter().chain(custom_rules.iter()) {
+        hash = fnv1a_update(hash, &(chunk.len() as u64).to_le_bytes());
+        hash = fnv1a_update(hash, chunk.as_bytes());
+    }
+    hash
+}
+
+/// Coba muat engine dari cache terserialisasi. Mengembalikan `None` bila
+/// cache tidak ada, rusak, versinya tidak cocok, atau hash-nya tidak
+/// cocok dengan input saat ini — pemanggil harus parse penuh.
+fn try_load_cached_engine(cache_dir: &Path, expected_hash: u64) -> Option<Engine> {
+    let bytes = fs::read(engine_cache_path(cache_dir)).ok()?;
+    let magic_len = ENGINE_CACHE_MAGIC.len();
+    let header_len = magic_len + 4 + 8;
+    if bytes.len() <= header_len || &bytes[..magic_len] != ENGINE_CACHE_MAGIC {
+        return None;
+    }
+    let version = u32::from_le_bytes(bytes[magic_len..magic_len + 4].try_into().ok()?);
+    if version != ENGINE_CACHE_FORMAT_VERSION {
+        return None;
+    }
+    let stored_hash = u64::from_le_bytes(bytes[magic_len + 4..header_len].try_into().ok()?);
+    if stored_hash != expected_hash {
+        return None;
+    }
+    let mut engine = Engine::default();
+    engine.deserialize(&bytes[header_len..]).ok()?;
+    Some(engine)
+}
+
+/// Tulis engine terserialisasi ke cache secara atomik (best-effort:
+/// semua kegagalan I/O diabaikan, browser tetap berjalan normal).
+fn store_cached_engine(cache_dir: &Path, hash: u64, engine: &Engine) {
+    if fs::create_dir_all(cache_dir).is_err() {
+        return;
+    }
+    let payload = engine.serialize();
+    let mut bytes = Vec::with_capacity(20 + payload.len());
+    bytes.extend_from_slice(ENGINE_CACHE_MAGIC);
+    bytes.extend_from_slice(&ENGINE_CACHE_FORMAT_VERSION.to_le_bytes());
+    bytes.extend_from_slice(&hash.to_le_bytes());
+    bytes.extend_from_slice(&payload);
+    let path = engine_cache_path(cache_dir);
+    let tmp_path = path.with_extension(format!("tmp.{}", std::process::id()));
+    if fs::write(&tmp_path, &bytes).is_ok() {
+        let _ = fs::rename(&tmp_path, &path);
+    } else {
+        let _ = fs::remove_file(&tmp_path);
+    }
 }
 
 pub struct AdBlockManager {
@@ -208,6 +329,8 @@ pub struct AdBlockManager {
     blocked_count: AtomicU64,
     rule_count: AtomicUsize,
     enabled: AtomicBool,
+    /// Direktori cache engine terserialisasi (`None` = tanpa cache).
+    engine_cache_dir: Option<PathBuf>,
 }
 
 impl AdBlockManager {
@@ -228,21 +351,49 @@ impl AdBlockManager {
         allowlist: &[String],
     ) -> Self {
         let (engine, rule_count) = build_engine(list_contents, extra_rules);
-        let mut normalized: Vec<String> = allowlist
-            .iter()
-            .filter_map(|d| normalize_domain(d))
-            .collect();
-        normalized.sort();
-        normalized.dedup();
         Self {
             engine: RwLock::new(engine),
             list_contents: RwLock::new(list_contents.to_vec()),
             custom_rules: RwLock::new(extra_rules.to_vec()),
-            allowlist: RwLock::new(normalized),
+            allowlist: RwLock::new(normalize_allowlist(allowlist)),
             cosmetic_cache: Mutex::new(CosmeticCache::new()),
             blocked_count: AtomicU64::new(0),
             rule_count: AtomicUsize::new(rule_count),
             enabled: AtomicBool::new(enabled),
+            engine_cache_dir: None,
+        }
+    }
+
+    /// Konstruktor lengkap dengan cache engine terserialisasi di
+    /// `cache_dir` (direktori `filter_lists/`). Bila cache cocok dengan
+    /// input (daftar + rule kustom), engine di-deserialize dari cache
+    /// sehingga startup tidak perlu mem-parse ulang puluhan ribu rule;
+    /// bila cache hilang/rusak/tidak cocok, parse penuh dilakukan dan
+    /// cache ditulis ulang. Perilaku pemblokiran identik di semua jalur.
+    pub fn with_lists_and_cache(
+        extra_rules: &[String],
+        enabled: bool,
+        list_contents: &[String],
+        allowlist: &[String],
+        cache_dir: &Path,
+    ) -> Self {
+        let hash = engine_inputs_hash(list_contents, extra_rules);
+        let rule_count = count_all_rules(list_contents, extra_rules);
+        let engine = try_load_cached_engine(cache_dir, hash).unwrap_or_else(|| {
+            let (engine, _) = build_engine(list_contents, extra_rules);
+            store_cached_engine(cache_dir, hash, &engine);
+            engine
+        });
+        Self {
+            engine: RwLock::new(engine),
+            list_contents: RwLock::new(list_contents.to_vec()),
+            custom_rules: RwLock::new(extra_rules.to_vec()),
+            allowlist: RwLock::new(normalize_allowlist(allowlist)),
+            cosmetic_cache: Mutex::new(CosmeticCache::new()),
+            blocked_count: AtomicU64::new(0),
+            rule_count: AtomicUsize::new(rule_count),
+            enabled: AtomicBool::new(enabled),
+            engine_cache_dir: Some(cache_dir.to_path_buf()),
         }
     }
 
@@ -261,6 +412,8 @@ impl AdBlockManager {
 
     /// Bangun ulang mesin dari isi daftar + rule kustom yang tersimpan.
     /// Dipanggil setelah daftar diperbarui atau rule kustom berubah.
+    /// Bila cache engine aktif, cache ditulis ulang agar startup
+    /// berikutnya memakai isi terbaru.
     fn rebuild(&self) {
         let lists = self
             .list_contents
@@ -277,6 +430,10 @@ impl AdBlockManager {
             cache.clear();
         }
         self.rule_count.store(new_count, Ordering::Relaxed);
+        if let Some(dir) = self.engine_cache_dir.as_ref() {
+            let hash = engine_inputs_hash(&lists, &custom);
+            store_cached_engine(dir, hash, &new_engine);
+        }
         if let Ok(mut lock) = self.engine.write() {
             *lock = new_engine;
         }
@@ -299,10 +456,7 @@ impl AdBlockManager {
 
     /// Ganti allowlist domain (input dinormalisasi, duplikat dibuang).
     pub fn set_allowlist(&self, domains: Vec<String>) {
-        let mut normalized: Vec<String> =
-            domains.iter().filter_map(|d| normalize_domain(d)).collect();
-        normalized.sort();
-        normalized.dedup();
+        let normalized = normalize_allowlist(&domains);
         if let Ok(mut lock) = self.allowlist.write() {
             *lock = normalized;
         }
@@ -330,12 +484,7 @@ impl AdBlockManager {
     }
 
     pub fn load_rule_file<P: AsRef<Path>>(&self, path: P) -> Result<usize, String> {
-        let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
-        let lines: Vec<String> = content
-            .lines()
-            .map(|l| l.trim().to_string())
-            .filter(|l| !l.is_empty() && !l.starts_with('!'))
-            .collect();
+        let lines = read_rule_file_lines(path)?;
         let count = lines.len();
 
         if let Ok(mut custom) = self.custom_rules.write() {
@@ -445,5 +594,89 @@ impl AdBlockManager {
 impl Default for AdBlockManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "attis_test_{}_{}_{}",
+            name,
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_engine_inputs_hash_is_deterministic_and_sensitive() {
+        let lists = vec!["||a.example^\n".to_string()];
+        let custom = vec!["||b.example^".to_string()];
+        let hash = engine_inputs_hash(&lists, &custom);
+        assert_eq!(hash, engine_inputs_hash(&lists, &custom));
+        // Perubahan isi daftar, rule kustom, atau urutan mengubah hash.
+        assert_ne!(
+            hash,
+            engine_inputs_hash(&["||a.example^\n||c.example^\n".to_string()], &custom)
+        );
+        assert_ne!(hash, engine_inputs_hash(&lists, &[]));
+        assert_ne!(hash, engine_inputs_hash(&[], &custom));
+        assert_ne!(
+            hash,
+            engine_inputs_hash(
+                &["||b.example^".to_string()],
+                &["||a.example^\n".to_string()]
+            )
+        );
+    }
+
+    #[test]
+    fn test_cached_engine_roundtrip_rejects_bad_cache() {
+        let dir = unique_temp_dir("engine_cache");
+        let lists = vec!["||cache-test.example^\n".to_string()];
+        let custom = vec!["||custom-cache.example^".to_string()];
+        let hash = engine_inputs_hash(&lists, &custom);
+
+        // Belum ada cache.
+        assert!(try_load_cached_engine(&dir, hash).is_none());
+
+        let (engine, _) = build_engine(&lists, &custom);
+        store_cached_engine(&dir, hash, &engine);
+
+        // Cache valid: mesin hasil deserialize memblokir seperti hasil parse.
+        let loaded = try_load_cached_engine(&dir, hash).expect("cache harus bisa dimuat");
+        let req = Request::new(
+            "https://cache-test.example/x.js",
+            "https://example.com",
+            "script",
+            "GET",
+        )
+        .expect("request valid");
+        assert!(loaded.check_network_request(&req).should_block());
+
+        // Hash tidak cocok -> None.
+        assert!(try_load_cached_engine(&dir, hash.wrapping_add(1)).is_none());
+
+        // Isi sampah -> None.
+        fs::write(engine_cache_path(&dir), b"garbage").unwrap();
+        assert!(try_load_cached_engine(&dir, hash).is_none());
+
+        // File terpotong -> None.
+        store_cached_engine(&dir, hash, &engine);
+        let mut bytes = fs::read(engine_cache_path(&dir)).unwrap();
+        bytes.truncate(10);
+        fs::write(engine_cache_path(&dir), bytes).unwrap();
+        assert!(try_load_cached_engine(&dir, hash).is_none());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

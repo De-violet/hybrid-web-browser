@@ -1,9 +1,26 @@
-use attis::adblock_engine::{normalize_domain, AdBlockManager};
+use attis::adblock_engine::{
+    engine_cache_path, normalize_domain, parse_rule_lines, AdBlockManager,
+};
 use attis::config::ConfigManager;
 use attis::history::HistoryManager;
 use attis::pages::{escape_html, generate_settings_page_html, generate_start_page_html};
 use attis::tabs::TabManager;
 use attis::theme::generate_qss;
+
+fn unique_temp_dir(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "attis_test_{}_{}_{}",
+        name,
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
 
 #[test]
 fn test_builtin_rules_block_tracking() {
@@ -297,4 +314,116 @@ fn test_cosmetic_css_cache_is_consistent() {
     let second = mgr.cosmetic_css_for_url("https://example.com/some-page");
     assert!(!first.is_empty());
     assert_eq!(first, second);
+}
+
+#[test]
+fn test_parse_rule_lines_skips_comments_and_blanks() {
+    let lines = parse_rule_lines("||a.example^\n\n! komentar\n   \n##.ad\n||b.example^  \n");
+    assert_eq!(
+        lines,
+        vec![
+            "||a.example^".to_string(),
+            "##.ad".to_string(),
+            "||b.example^".to_string()
+        ]
+    );
+}
+
+#[test]
+fn test_engine_cache_roundtrip_keeps_blocking_behavior() {
+    let dir = unique_temp_dir("engine_cache_rt");
+    let lists = vec!["||cache-roundtrip.example^\n##.cache-ad\n".to_string()];
+    let custom = vec!["||custom-roundtrip.example^".to_string()];
+
+    let mgr1 = AdBlockManager::with_lists_and_cache(&custom, true, &lists, &[], &dir);
+    assert!(mgr1.check_url(
+        "https://cache-roundtrip.example/a.js",
+        3,
+        "https://example.com"
+    ));
+    assert!(mgr1.check_url(
+        "https://custom-roundtrip.example/a.js",
+        3,
+        "https://example.com"
+    ));
+    let count1 = mgr1.rule_count();
+    assert!(engine_cache_path(&dir).exists());
+
+    // Konstruksi kedua dengan input sama: perilaku dan rule_count identik.
+    let mgr2 = AdBlockManager::with_lists_and_cache(&custom, true, &lists, &[], &dir);
+    assert_eq!(mgr2.rule_count(), count1);
+    assert!(mgr2.check_url(
+        "https://cache-roundtrip.example/a.js",
+        3,
+        "https://example.com"
+    ));
+    assert!(mgr2.check_url(
+        "https://custom-roundtrip.example/a.js",
+        3,
+        "https://example.com"
+    ));
+    assert!(!mgr2.check_url("https://good.example/a.js", 3, "https://example.com"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_engine_cache_invalidates_when_lists_change() {
+    let dir = unique_temp_dir("engine_cache_inv");
+    let lists_a = vec!["||list-a.example^\n".to_string()];
+    let mgr_a = AdBlockManager::with_lists_and_cache(&[], true, &lists_a, &[], &dir);
+    assert!(mgr_a.check_url("https://list-a.example/a.js", 3, "https://example.com"));
+
+    // Daftar berubah -> cache lama tidak dipakai, mesin mencerminkan daftar baru.
+    let lists_b = vec!["||list-b.example^\n".to_string()];
+    let mgr_b = AdBlockManager::with_lists_and_cache(&[], true, &lists_b, &[], &dir);
+    assert!(mgr_b.check_url("https://list-b.example/a.js", 3, "https://example.com"));
+    assert!(!mgr_b.check_url("https://list-a.example/a.js", 3, "https://example.com"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_engine_cache_corrupt_falls_back_to_full_parse() {
+    let dir = unique_temp_dir("engine_cache_bad");
+    let lists = vec!["||fallback.example^\n".to_string()];
+    let mgr1 = AdBlockManager::with_lists_and_cache(&[], true, &lists, &[], &dir);
+    assert!(mgr1.check_url("https://fallback.example/a.js", 3, "https://example.com"));
+
+    // Rusak cache: konstruksi berikutnya tetap memblokir (parse penuh).
+    std::fs::write(engine_cache_path(&dir), b"not a valid cache").unwrap();
+    let mgr2 = AdBlockManager::with_lists_and_cache(&[], true, &lists, &[], &dir);
+    assert!(mgr2.check_url("https://fallback.example/a.js", 3, "https://example.com"));
+
+    // Cache ditulis ulang dan valid lagi.
+    let mgr3 = AdBlockManager::with_lists_and_cache(&[], true, &lists, &[], &dir);
+    assert!(mgr3.check_url("https://fallback.example/a.js", 3, "https://example.com"));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn test_reload_lists_updates_engine_cache() {
+    let dir = unique_temp_dir("engine_cache_reload");
+    let mgr = AdBlockManager::with_lists_and_cache(
+        &[],
+        true,
+        &["||before.example^\n".to_string()],
+        &[],
+        &dir,
+    );
+    mgr.reload_lists(vec!["||after.example^\n".to_string()]);
+
+    // Manager baru dengan isi terbaru memakai cache hasil reload.
+    let mgr2 = AdBlockManager::with_lists_and_cache(
+        &[],
+        true,
+        &["||after.example^\n".to_string()],
+        &[],
+        &dir,
+    );
+    assert!(mgr2.check_url("https://after.example/a.js", 3, "https://example.com"));
+    assert!(!mgr2.check_url("https://before.example/a.js", 3, "https://example.com"));
+
+    let _ = std::fs::remove_dir_all(&dir);
 }

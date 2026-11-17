@@ -227,15 +227,20 @@ pub struct BrowserConfig {
     #[serde(default = "default_cache_mb")]
     pub http_cache_size_mb: u32,
 
-    /// Batas proses renderer Chromium (0 = default Qt). Opt-in untuk RAM kecil.
+    /// Batas proses renderer Chromium (0 = otomatis, memakai 4).
+    /// Nilai eksplisit dipakai apa adanya, di-clamp ke 64.
     #[serde(default)]
     pub renderer_process_limit: u32,
 }
 
 impl BrowserConfig {
-    /// Batas proses renderer yang sudah di-clamp ke rentang wajar (0-64).
+    /// Batas proses renderer yang efektif: 0 (otomatis) dipetakan ke 4,
+    /// nilai lain di-clamp ke rentang 1-64.
     pub fn renderer_process_limit_clamped(&self) -> u32 {
-        self.renderer_process_limit.min(64)
+        match self.renderer_process_limit {
+            0 => 4,
+            n => n.min(64),
+        }
     }
 }
 

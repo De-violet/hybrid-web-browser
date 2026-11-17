@@ -22,6 +22,7 @@ void browser_set_tab_close_callback(BrowserHandle handle, RustTabCloseCallback c
 void browser_set_tab_move_callback(BrowserHandle handle, RustTabMoveCallback cb);
 int browser_add_tab(BrowserHandle handle, const char* url);
 int browser_add_private_tab(BrowserHandle handle, const char* url);
+int browser_add_suspended_tab(BrowserHandle handle, const char* url, const char* title);
 void browser_close_tab(BrowserHandle handle, int index);
 void browser_switch_tab(BrowserHandle handle, int index);
 void browser_navigate(BrowserHandle handle, const char* url);

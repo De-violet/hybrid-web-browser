@@ -18,6 +18,11 @@ extern "C" {
     pub fn browser_set_tab_move_callback(handle: BrowserHandle, cb: RustTabMoveCallback);
     pub fn browser_add_tab(handle: BrowserHandle, raw_url: *const c_char) -> c_int;
     pub fn browser_add_private_tab(handle: BrowserHandle, raw_url: *const c_char) -> c_int;
+    pub fn browser_add_suspended_tab(
+        handle: BrowserHandle,
+        raw_url: *const c_char,
+        title: *const c_char,
+    ) -> c_int;
     pub fn browser_close_tab(handle: BrowserHandle, index: c_int);
     pub fn browser_switch_tab(handle: BrowserHandle, index: c_int);
     pub fn browser_navigate(handle: BrowserHandle, raw_url: *const c_char);
@@ -143,6 +148,14 @@ impl BrowserApp {
     pub fn add_private_tab(&self, url: &str) -> i32 {
         let c_url = CString::new(url).unwrap_or_else(|_| CString::new("").unwrap());
         unsafe { browser_add_private_tab(self.handle, c_url.as_ptr()) }
+    }
+
+    /// Buat tab restore dalam keadaan tersuspensi (URL/judul tampil, isi
+    /// belum dimuat). Tab dimuat saat pertama kali diaktifkan.
+    pub fn add_suspended_tab(&self, url: &str, title: &str) -> i32 {
+        let c_url = CString::new(url).unwrap_or_else(|_| CString::new("").unwrap());
+        let c_title = CString::new(title).unwrap_or_else(|_| CString::new("").unwrap());
+        unsafe { browser_add_suspended_tab(self.handle, c_url.as_ptr(), c_title.as_ptr()) }
     }
 
     pub fn switch_tab(&self, index: i32) {

@@ -124,3 +124,21 @@ fn test_session_tab_cap() {
     let session = tabs_to_session(&tabs, 0).unwrap();
     assert_eq!(session.tabs.len(), MAX_SESSION_TABS);
 }
+
+#[test]
+fn test_session_titles_preserved_for_lazy_restore() {
+    // Lazy restore mengandalkan judul tersimpan: judul harus tampil di tab
+    // sebelum isinya dimuat, dan active_index harus selalu valid.
+    let dir = unique_temp_dir("session_titles");
+    let tabs = vec![
+        tab("https://a.example", "Judul A", false),
+        tab("https://b.example", "Judul B yang panjang", false),
+    ];
+    assert!(save_session(&dir, &tabs, 1).unwrap());
+    let loaded = load_session(&dir).expect("sesi harus bisa dimuat");
+    assert_eq!(loaded.tabs[0].title, "Judul A");
+    assert_eq!(loaded.tabs[1].title, "Judul B yang panjang");
+    assert_eq!(loaded.active_index, 1);
+    assert!(loaded.active_index < loaded.tabs.len());
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -24,6 +24,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and data from earlier installs are not migrated automatically; copy
   them from the previous config directory if needed.
 - Documentation (README, CHANGELOG) is now written in English.
+- Session restore is now lazy: only the active tab is loaded at
+  startup; restored tabs are created suspended, show their saved title
+  and URL immediately, and load the first time they are activated.
+  This avoids loading all restored tabs at once on startup.
+- The adblock engine is now built once at startup: custom rules from
+  `custom_rules.txt` are merged before the build instead of triggering
+  a second full rebuild. The serialized engine is cached in
+  `filter_lists/` with hash validation over the list contents and
+  custom rules, so later startups skip re-parsing the filter lists
+  when nothing changed. A missing or corrupt cache falls back to a
+  full parse transparently, and the cache is rewritten after filter
+  updates.
+
+### Fixed
+
+- `renderer_process_limit` in `config.json` is now honored: the C++
+  bridge previously overwrote the Chromium flags environment variable
+  with a hardcoded `--renderer-process-limit=2`, so the effective
+  limit was always 2 regardless of the setting. The bridge now merges
+  its flags with the ones set from configuration (or the shell), and
+  the renderer limit is owned by the Rust side. A value of `0`
+  (default) now applies an automatic limit of 4.
 
 ## [0.2.0] - 2026-11-17
 

@@ -65,7 +65,10 @@ fn test_legacy_config_loads_with_new_defaults() {
 #[test]
 fn test_renderer_process_limit_clamped() {
     let mut cfg = BrowserConfig::default();
-    assert_eq!(cfg.renderer_process_limit_clamped(), 0);
+    // 0 = otomatis -> 4.
+    assert_eq!(cfg.renderer_process_limit_clamped(), 4);
+    cfg.renderer_process_limit = 1;
+    assert_eq!(cfg.renderer_process_limit_clamped(), 1);
     cfg.renderer_process_limit = 4;
     assert_eq!(cfg.renderer_process_limit_clamped(), 4);
     cfg.renderer_process_limit = 999;

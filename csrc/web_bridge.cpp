@@ -1492,8 +1492,11 @@ static void setup_download_handler(BrowserContext *ctx, QWebEngineProfile *profi
 
 BrowserHandle browser_create(const char* title, int width, int height) {
     // 1. Ultra-Low RAM & Hardware Acceleration Optimization Flags
-    qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
-        "--renderer-process-limit=2 "
+    // Gabungkan dengan flag yang sudah disetel sisi Rust/shell (mis.
+    // --renderer-process-limit dari config); jangan timpa. Flag
+    // --renderer-process-limit dimiliki sisi Rust dan tidak lagi
+    // di-hardcode di sini.
+    const char* kBaseFlags =
         "--enable-low-end-device-mode "
         "--disable-gpu-shader-disk-cache "
         "--disable-gpu-program-cache "
@@ -1502,8 +1505,12 @@ BrowserHandle browser_create(const char* title, int width, int height) {
         "--disable-speech-api "
         "--disable-breakpad "
         "--enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL "
-        "--enable-accelerated-video-decode"
-    );
+        "--enable-accelerated-video-decode";
+    QByteArray existingFlags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").trimmed();
+    QByteArray mergedFlags = existingFlags.isEmpty()
+        ? QByteArray(kBaseFlags)
+        : existingFlags + " " + kBaseFlags;
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", mergedFlags);
 
     auto *ctx = new BrowserContext();
 
@@ -2376,6 +2383,51 @@ int browser_add_tab(BrowserHandle handle, const char* raw_url) {
 int browser_add_private_tab(BrowserHandle handle, const char* raw_url) {
     auto *ctx = static_cast<BrowserContext*>(handle);
     return create_tab_internal(ctx, raw_url, true);
+}
+
+// Lazy restore: buat tab dalam keadaan tersuspensi TANPA memuat URL.
+// Tab dimuat saat pertama kali diaktifkan oleh handler currentChanged,
+// sama seperti tab yang disuspensi Smart Memory (savedUrl/savedTitle).
+static int create_suspended_tab_internal(BrowserContext *ctx, const char* raw_url, const char* raw_title) {
+    if (!ctx || !ctx->tabBar || !ctx->viewStack) return -1;
+
+    auto *view = new QWebEngineView(ctx->viewStack);
+    view->setPage(new BrowserPage(ctx, QWebEngineProfile::defaultProfile(), view));
+    attach_view_signals(ctx, view);
+
+    TabMeta meta;
+    meta.view = view;
+    meta.lastActive = QDateTime::currentSecsSinceEpoch();
+    meta.isSuspended = false;
+    meta.isPrivate = false;
+    ctx->tabs.push_back(meta);
+
+    QString title = raw_title ? QString::fromUtf8(raw_title).trimmed() : QString();
+    if (title.isEmpty()) {
+        title = raw_url ? QString::fromUtf8(raw_url) : QString("New Tab");
+    }
+    QString displayTitle = title;
+    if (displayTitle.length() > 26) {
+        displayTitle = displayTitle.left(23) + "...";
+    }
+
+    ctx->viewStack->addWidget(view);
+    int index = ctx->tabBar->addTab("💤 " + displayTitle);
+    ctx->tabBar->setCurrentIndex(index);
+    ctx->viewStack->setCurrentWidget(view);
+
+    // Tandai tersuspensi SETELAH aktivasi agar currentChanged tidak
+    // langsung memulihkan tab ini; pemulihan terjadi saat tab diklik.
+    ctx->tabs[index].savedUrl = raw_url ? QString::fromUtf8(raw_url) : QString();
+    ctx->tabs[index].savedTitle = title;
+    ctx->tabs[index].isSuspended = true;
+
+    return index;
+}
+
+int browser_add_suspended_tab(BrowserHandle handle, const char* raw_url, const char* title) {
+    auto *ctx = static_cast<BrowserContext*>(handle);
+    return create_suspended_tab_internal(ctx, raw_url, title);
 }
 
 void browser_close_tab(BrowserHandle handle, int index) {

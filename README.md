@@ -119,7 +119,7 @@ Downloads use `curl` (or `wget` as a fallback; on Windows `curl.exe` then PowerS
 
 - **Tab suspension:** background tabs inactive for longer than `suspend_after_seconds` (default 120 seconds; 45 seconds when the open tab count exceeds `suspend_many_tabs_threshold`) are unloaded to `about:blank` until revisited. Tabs that are playing sound are never suspended, so video/music streaming is safe. Disable via `suspend_enabled: false` or in Settings.
 - **In-memory HTTP cache:** limited to `http_cache_size_mb` (default 20 MB).
-- **Renderer process limit:** set `renderer_process_limit` in `config.json` (for example `4`) to cap Chromium renderer processes on low-RAM machines. `0` (default) uses the Qt default. Changes apply when the browser is reopened.
+- **Renderer process limit:** set `renderer_process_limit` in `config.json` (for example `4`) to cap Chromium renderer processes on low-RAM machines. `0` (default) applies the automatic limit of 4. Changes apply when the browser is reopened.
 
 ---
 
