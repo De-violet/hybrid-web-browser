@@ -1,7 +1,9 @@
 pub mod adblock_engine;
 pub mod bridge;
 pub mod config;
+pub mod filter_lists;
 pub mod history;
 pub mod pages;
+pub mod session;
 pub mod tabs;
 pub mod theme;
