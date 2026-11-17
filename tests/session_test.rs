@@ -1,12 +1,12 @@
-use falkon_rust::session::{
+use attis::session::{
     clear_session, is_restorable_url, load_session, save_session, session_path, tabs_to_session,
     MAX_SESSION_TABS,
 };
-use falkon_rust::tabs::{TabItem, TabManager};
+use attis::tabs::{TabItem, TabManager};
 
 fn unique_temp_dir(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "falkon_test_{}_{}_{}",
+        "attis_test_{}_{}_{}",
         name,
         std::process::id(),
         std::time::SystemTime::now()
@@ -32,8 +32,8 @@ fn tab(url: &str, title: &str, is_private: bool) -> TabItem {
 fn test_is_restorable_url() {
     assert!(is_restorable_url("https://example.com"));
     assert!(is_restorable_url("http://example.com/x"));
-    assert!(!is_restorable_url("falkon:home"));
-    assert!(!is_restorable_url("falkon:settings"));
+    assert!(!is_restorable_url("attis:home"));
+    assert!(!is_restorable_url("attis:settings"));
     assert!(!is_restorable_url("about:blank"));
     assert!(!is_restorable_url("data:text/html,hi"));
     assert!(!is_restorable_url(""));
@@ -45,7 +45,7 @@ fn test_tabs_to_session_filters_private_and_internal() {
     let tabs = vec![
         tab("https://a.example", "A", false),
         tab("https://secret.example", "Secret", true),
-        tab("falkon:home", "Home", false),
+        tab("attis:home", "Home", false),
         tab("about:blank", "", false),
         tab("https://b.example/page", "B", false),
     ];
@@ -101,7 +101,7 @@ fn test_load_session_rejects_corrupt_and_clamps_index() {
 
     std::fs::write(
         session_path(&dir),
-        r#"{"version":1,"tabs":[{"url":"falkon:home","title":"H"}],"active_index":0,"saved_at":0}"#,
+        r#"{"version":1,"tabs":[{"url":"attis:home","title":"H"}],"active_index":0,"saved_at":0}"#,
     )
     .unwrap();
     assert!(load_session(&dir).is_none());

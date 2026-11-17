@@ -26,12 +26,12 @@ pub fn generate_qss(
     let bg_clean = bg.trim().trim_start_matches('#');
     let (r, g, b) = if bg_clean.len() == 6 {
         (
-            u8::from_str_radix(&bg_clean[0..2], 16).unwrap_or(24),
-            u8::from_str_radix(&bg_clean[2..4], 16).unwrap_or(24),
-            u8::from_str_radix(&bg_clean[4..6], 16).unwrap_or(37),
+            u8::from_str_radix(&bg_clean[0..2], 16).unwrap_or(22),
+            u8::from_str_radix(&bg_clean[2..4], 16).unwrap_or(16),
+            u8::from_str_radix(&bg_clean[4..6], 16).unwrap_or(42),
         )
     } else {
-        (24, 24, 37)
+        (22, 16, 42)
     };
     let luminance = (0.299 * (r as f32) + 0.587 * (g as f32) + 0.114 * (b as f32)) as u32;
     let is_light = luminance > 140;
@@ -64,13 +64,13 @@ pub fn generate_qss(
 
     let bg_rgba = format!("rgba({}, {}, {}, {:.2})", r, g, b, op);
     let surface_col = if surface.is_empty() {
-        "#1e1e2e"
+        "#1e1738"
     } else {
         surface
     };
-    let fg_col = if fg.is_empty() { "#cdd6f4" } else { fg };
-    let accent_col = if accent.is_empty() { "#89b4fa" } else { accent };
-    let border_col = if border.is_empty() { "#313244" } else { border };
+    let fg_col = if fg.is_empty() { "#ddd6fe" } else { fg };
+    let accent_col = if accent.is_empty() { "#8b5cf6" } else { accent };
+    let border_col = if border.is_empty() { "#3f2d6b" } else { border };
 
     let base_qss = format!(
         r#"
@@ -268,29 +268,29 @@ pub unsafe extern "C" fn rust_get_theme_qss(
     close_hover: *const c_char,
 ) -> *mut c_char {
     let bg_str = if bg.is_null() {
-        "#181825"
+        "#16102a"
     } else {
-        unsafe { CStr::from_ptr(bg).to_str().unwrap_or("#181825") }
+        unsafe { CStr::from_ptr(bg).to_str().unwrap_or("#16102a") }
     };
     let surface_str = if surface.is_null() {
-        "#1e1e2e"
+        "#1e1738"
     } else {
-        unsafe { CStr::from_ptr(surface).to_str().unwrap_or("#1e1e2e") }
+        unsafe { CStr::from_ptr(surface).to_str().unwrap_or("#1e1738") }
     };
     let fg_str = if fg.is_null() {
-        "#cdd6f4"
+        "#ddd6fe"
     } else {
-        unsafe { CStr::from_ptr(fg).to_str().unwrap_or("#cdd6f4") }
+        unsafe { CStr::from_ptr(fg).to_str().unwrap_or("#ddd6fe") }
     };
     let accent_str = if accent.is_null() {
-        "#89b4fa"
+        "#8b5cf6"
     } else {
-        unsafe { CStr::from_ptr(accent).to_str().unwrap_or("#89b4fa") }
+        unsafe { CStr::from_ptr(accent).to_str().unwrap_or("#8b5cf6") }
     };
     let border_str = if border.is_null() {
-        "#313244"
+        "#3f2d6b"
     } else {
-        unsafe { CStr::from_ptr(border).to_str().unwrap_or("#313244") }
+        unsafe { CStr::from_ptr(border).to_str().unwrap_or("#3f2d6b") }
     };
     let density_str = if density.is_null() {
         "comfortable"

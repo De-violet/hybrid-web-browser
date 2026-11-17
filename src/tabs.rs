@@ -49,7 +49,7 @@ impl TabManager {
             let removed = self.tabs.remove(index);
             if !removed.is_private
                 && !removed.url.is_empty()
-                && removed.url != "falkon:home"
+                && removed.url != "attis:home"
                 && removed.url != "about:blank"
             {
                 self.closed_tabs.push(removed.clone());

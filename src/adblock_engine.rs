@@ -13,7 +13,7 @@ use std::sync::{Mutex, RwLock};
 /// penuh berasal dari daftar filter yang diunduh (lihat `filter_lists`).
 const DEFAULT_RULES: &str = r#"
 ! -------------------------------------------------------------
-! Built-in uBlock Origin / EasyList core rules for Falkon-Rust
+! Built-in uBlock Origin / EasyList core rules for Attis
 ! -------------------------------------------------------------
 ||google-analytics.com^$third-party
 ||googletagservices.com^$third-party

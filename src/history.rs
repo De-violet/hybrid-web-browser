@@ -73,8 +73,8 @@ impl HistoryManager {
         let trimmed = url.trim();
         if trimmed.is_empty()
             || trimmed.starts_with("about:")
-            || trimmed.starts_with("falkon:")
-            || trimmed.starts_with("falkon-set:")
+            || trimmed.starts_with("attis:")
+            || trimmed.starts_with("attis-set:")
             || trimmed.starts_with("data:")
         {
             return;

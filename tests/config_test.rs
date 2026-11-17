@@ -1,9 +1,9 @@
-use falkon_rust::config::{BrowserConfig, ConfigManager};
-use falkon_rust::pages::settings_extras_from_dir;
+use attis::config::{BrowserConfig, ConfigManager};
+use attis::pages::settings_extras_from_dir;
 
 fn unique_temp_dir(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "falkon_test_{}_{}_{}",
+        "attis_test_{}_{}_{}",
         name,
         std::process::id(),
         std::time::SystemTime::now()

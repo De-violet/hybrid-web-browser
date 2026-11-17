@@ -4,13 +4,13 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 fn default_homepage() -> String {
-    "falkon:home".to_string()
+    "attis:home".to_string()
 }
 fn default_search_engine() -> String {
     "https://www.google.com/search?q=%s".to_string()
 }
 fn default_theme() -> String {
-    "dark".to_string()
+    "violet".to_string()
 }
 fn default_download_dir() -> String {
     if let Ok(xdg_dl) = std::env::var("XDG_DOWNLOAD_DIR") {
@@ -45,19 +45,19 @@ fn default_window_height() -> i32 {
     800
 }
 fn default_bg_color() -> String {
-    "#181825".to_string()
+    "#16102a".to_string()
 }
 fn default_fg_color() -> String {
-    "#cdd6f4".to_string()
+    "#ddd6fe".to_string()
 }
 fn default_accent_color() -> String {
-    "#89b4fa".to_string()
+    "#8b5cf6".to_string()
 }
 fn default_surface_color() -> String {
-    "#1e1e2e".to_string()
+    "#1e1738".to_string()
 }
 fn default_border_color() -> String {
-    "#313244".to_string()
+    "#3f2d6b".to_string()
 }
 fn default_bg_opacity() -> f32 {
     0.88
@@ -88,20 +88,20 @@ fn default_cache_mb() -> u32 {
 }
 
 pub fn resolve_config_dir() -> PathBuf {
-    if let Ok(custom_dir) = std::env::var("FALKON_RUST_CONFIG_DIR") {
+    if let Ok(custom_dir) = std::env::var("ATTIS_CONFIG_DIR") {
         if !custom_dir.trim().is_empty() {
             return PathBuf::from(custom_dir);
         }
     }
     if let Ok(xdg_cfg) = std::env::var("XDG_CONFIG_HOME") {
         if !xdg_cfg.trim().is_empty() {
-            return PathBuf::from(xdg_cfg).join("falkon-rust");
+            return PathBuf::from(xdg_cfg).join("attis");
         }
     }
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".config").join("falkon-rust")
+    PathBuf::from(home).join(".config").join("attis")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,7 +113,7 @@ pub struct BrowserConfig {
     pub search_engine: String,
 
     #[serde(default = "default_theme")]
-    pub theme: String, // "dark", "catppuccin", "light", "minimal", "nord", "gruvbox", "custom"
+    pub theme: String, // "violet" (default), "dark", "catppuccin", "light", "minimal", "nord", "gruvbox", "custom"
 
     #[serde(default = "default_bg_color")]
     pub bg_color: String,

@@ -172,12 +172,12 @@ struct BrowserContext {
     bool showNewTabButton = true;
     bool enableAdblock = true;
     bool enableCosmeticFilter = true;
-    QString currentTheme = "dark";
-    QString bgColor = "#181825";
-    QString fgColor = "#cdd6f4";
-    QString accentColor = "#89b4fa";
-    QString surfaceColor = "#1e1e2e";
-    QString borderColor = "#313244";
+    QString currentTheme = "violet";
+    QString bgColor = "#16102a";
+    QString fgColor = "#ddd6fe";
+    QString accentColor = "#8b5cf6";
+    QString surfaceColor = "#1e1738";
+    QString borderColor = "#3f2d6b";
     float bgOpacity = 0.88f;
     QString uiDensity = "comfortable";
     QString tabPosition = "top";
@@ -265,8 +265,8 @@ static void update_tab_bar_placement(BrowserContext *ctx) {
 static void apply_theme_qss(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
 
-    QString closeSvg = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/tab_close.svg";
-    QString closeHoverSvg = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/tab_close_hover.svg";
+    QString closeSvg = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/tab_close.svg";
+    QString closeHoverSvg = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/tab_close_hover.svg";
 
     char* rawQss = rust_get_theme_qss(
         ctx->bgColor.toUtf8().constData(),
@@ -301,7 +301,9 @@ void browser_set_theme(BrowserHandle handle, const char* theme_name, const char*
     if (theme_name) {
         QString t = QString::fromUtf8(theme_name).toLower();
         ctx->currentTheme = t;
-        if (t == "dark_glass" || t == "dark") {
+        if (t == "violet") {
+            ctx->bgColor = "#16102a"; ctx->surfaceColor = "#1e1738"; ctx->fgColor = "#ddd6fe"; ctx->accentColor = "#8b5cf6"; ctx->borderColor = "#3f2d6b"; ctx->bgOpacity = 0.88f;
+        } else if (t == "dark_glass" || t == "dark") {
             ctx->bgColor = "#11111b"; ctx->surfaceColor = "#181825"; ctx->fgColor = "#cdd6f4"; ctx->accentColor = "#89b4fa"; ctx->borderColor = "#313244"; ctx->bgOpacity = 0.88f;
         } else if (t == "catppuccin") {
             ctx->bgColor = "#1e1e2e"; ctx->surfaceColor = "#181825"; ctx->fgColor = "#cdd6f4"; ctx->accentColor = "#cba6f7"; ctx->borderColor = "#45475a"; ctx->bgOpacity = 0.92f;
@@ -454,14 +456,14 @@ static void update_url_bar_for_current_tab(BrowserContext *ctx) {
     auto *currentView = qobject_cast<QWebEngineView*>(ctx->viewStack->currentWidget());
     if (currentView) {
         currentUrl = currentView->url().toString();
-        if (currentUrl == "falkon:home") {
+        if (currentUrl == "attis:home") {
             ctx->urlBar->setText("");
             ctx->urlBar->setPlaceholderText(ctx->useGoogleSearch
                 ? "Cari di Google atau ketik alamat URL... (Ctrl+L)"
                 : "Cari di DuckDuckGo atau ketik alamat URL... (Ctrl+L)");
             update_bookmark_button(ctx, false);
-        } else if (currentUrl == "falkon:settings") {
-            ctx->urlBar->setText("falkon:settings");
+        } else if (currentUrl == "attis:settings") {
+            ctx->urlBar->setText("attis:settings");
             update_bookmark_button(ctx, false);
         } else {
             ctx->urlBar->setText(currentUrl);
@@ -515,7 +517,7 @@ static void run_smart_memory_cleanup(BrowserContext *ctx) {
         qint64 threshold = manyTabs ? ctx->suspendManySecs : ctx->suspendAfterSecs;
         if (now - meta.lastActive > threshold) {
             QString currentUrl = meta.view->url().toString();
-            if (!currentUrl.isEmpty() && currentUrl != "about:blank" && currentUrl != "falkon:home" && currentUrl != "falkon:settings") {
+            if (!currentUrl.isEmpty() && currentUrl != "about:blank" && currentUrl != "attis:home" && currentUrl != "attis:settings") {
                 meta.savedUrl = currentUrl;
                 meta.savedTitle = ctx->tabBar->tabText(static_cast<int>(i));
                 meta.isSuspended = true;
@@ -562,7 +564,7 @@ static const char* UNLOCK_HTTP_SVG =
     "</svg>";
 
 static const char* INTERNAL_PAGE_SVG =
-    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='#89b4fa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='#8b5cf6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
     "<circle cx='12' cy='12' r='10'/>"
     "<line x1='12' y1='16' x2='12' y2='12'/>"
     "<line x1='12' y1='8' x2='12.01' y2='8'/>"
@@ -582,7 +584,7 @@ static void update_security_indicator(BrowserContext *ctx, const QString &url) {
     } else {
         px.loadFromData(reinterpret_cast<const uchar*>(INTERNAL_PAGE_SVG), static_cast<uint>(strlen(INTERNAL_PAGE_SVG)), "SVG");
         ctx->securityAction->setIcon(QIcon(px));
-        ctx->securityAction->setToolTip("Halaman Internal Falkon-Rust");
+        ctx->securityAction->setToolTip("Halaman Internal Attis");
     }
 }
 
@@ -703,8 +705,8 @@ static const char* STAR_FILLED_SVG =
     "</svg>";
 
 static bool is_url_bookmarked(const QString &url) {
-    if (url.isEmpty() || url.startsWith("falkon:") || url.startsWith("about:")) return false;
-    QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/bookmarks.json";
+    if (url.isEmpty() || url.startsWith("attis:") || url.startsWith("about:")) return false;
+    QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/bookmarks.json";
     QFile f(bmPath);
     if (!f.open(QIODevice::ReadOnly)) return false;
     QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
@@ -733,9 +735,9 @@ static void toggle_bookmark_current_page(BrowserContext *ctx) {
     QString url = curView->url().toString();
     QString title = curView->title();
     if (title.isEmpty()) title = url;
-    if (url.isEmpty() || url.startsWith("falkon:") || url.startsWith("about:")) return;
+    if (url.isEmpty() || url.startsWith("attis:") || url.startsWith("about:")) return;
 
-    QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/bookmarks.json";
+    QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/bookmarks.json";
     QFile f(bmPath);
     QJsonArray arr;
     if (f.open(QIODevice::ReadOnly)) {
@@ -785,7 +787,7 @@ static void show_bookmarks_dialog(BrowserContext *ctx) {
 
     auto *listWidget = new QListWidget(&dlg);
 
-    QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/bookmarks.json";
+    QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/bookmarks.json";
     QFile f(bmPath);
     if (f.open(QIODevice::ReadOnly)) {
         QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
@@ -882,7 +884,7 @@ static void show_history_dialog(BrowserContext *ctx) {
 
     auto *listWidget = new QListWidget(&dlg);
 
-    QString histPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/history.json";
+    QString histPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/history.json";
     QFile f(histPath);
     if (f.open(QIODevice::ReadOnly)) {
         QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
@@ -1040,7 +1042,7 @@ static void show_downloads_dialog(BrowserContext *ctx) {
 
 static void save_browser_config(BrowserContext *ctx, const QString &homepage = "") {
     if (!ctx) return;
-    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/config.json";
+    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/config.json";
     QJsonObject root;
     QFile rf(configPath);
     if (rf.open(QIODevice::ReadOnly)) {
@@ -1055,7 +1057,7 @@ static void save_browser_config(BrowserContext *ctx, const QString &homepage = "
     if (!homepage.isEmpty()) {
         root["homepage"] = homepage;
     } else if (!root.contains("homepage")) {
-        root["homepage"] = "falkon:home";
+        root["homepage"] = "attis:home";
     }
     root["show_nav_buttons"] = (ctx->backBtn && ctx->backBtn->isVisible());
     root["show_adblock_badge"] = (ctx->adblockBadge && ctx->adblockBadge->isVisible());
@@ -1104,20 +1106,20 @@ static void refresh_internal_tabs(BrowserContext *ctx) {
     if (!ctx) return;
     for (auto &t : ctx->tabs) {
         if (!t.view) continue;
-        if (t.savedUrl == "falkon:settings") {
+        if (t.savedUrl == "attis:settings") {
             t.view->page()->setBackgroundColor(Qt::transparent);
-            t.view->setHtml(generate_settings_page_html(ctx), QUrl("falkon:settings"));
-        } else if (t.savedUrl == "falkon:home") {
+            t.view->setHtml(generate_settings_page_html(ctx), QUrl("attis:settings"));
+        } else if (t.savedUrl == "attis:home") {
             t.view->page()->setBackgroundColor(Qt::transparent);
-            t.view->setHtml(generate_start_page_html(ctx), QUrl("falkon:home"));
+            t.view->setHtml(generate_start_page_html(ctx), QUrl("attis:home"));
         }
     }
 }
 
 static QString generate_settings_page_html(BrowserContext *ctx) {
     if (!ctx) return QString();
-    QString hp = "falkon:home";
-    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/config.json";
+    QString hp = "attis:home";
+    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/config.json";
     QFile f(configPath);
     if (f.open(QIODevice::ReadOnly)) {
         QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
@@ -1153,7 +1155,7 @@ static void open_settings_tab(BrowserContext *ctx);
 
 static void save_allowlist_config(BrowserContext *ctx, const QString &csv) {
     if (!ctx) return;
-    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/config.json";
+    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/config.json";
     QJsonObject root;
     QFile rf(configPath);
     if (rf.open(QIODevice::ReadOnly)) {
@@ -1244,7 +1246,7 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
     } else if (action == "custom_qss") {
         QString qss = q.queryItemValue("qss", QUrl::FullyDecoded);
         ctx->customChromeQss = qss;
-        QString userQssPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/user_chrome.qss";
+        QString userQssPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/user_chrome.qss";
         QFile f(userQssPath);
         if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
             f.write(qss.toUtf8());
@@ -1253,12 +1255,12 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         apply_theme_qss(ctx);
         save_browser_config(ctx);
     } else if (action == "reset_defaults" || action == "reset") {
-        ctx->currentTheme = "dark";
-        ctx->bgColor = "#181825";
-        ctx->surfaceColor = "#1e1e2e";
-        ctx->fgColor = "#cdd6f4";
-        ctx->accentColor = "#89b4fa";
-        ctx->borderColor = "#313244";
+        ctx->currentTheme = "violet";
+        ctx->bgColor = "#16102a";
+        ctx->surfaceColor = "#1e1738";
+        ctx->fgColor = "#ddd6fe";
+        ctx->accentColor = "#8b5cf6";
+        ctx->borderColor = "#3f2d6b";
         ctx->bgOpacity = 0.88f;
         ctx->uiDensity = "comfortable";
         ctx->tabPosition = "top";
@@ -1273,7 +1275,7 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         ctx->restoreSession = true;
         ctx->filterAutoUpdate = true;
         ctx->customChromeQss = "";
-        QString userQssPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust/user_chrome.qss";
+        QString userQssPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/user_chrome.qss";
         QFile::remove(userQssPath);
         apply_theme_qss(ctx);
         save_browser_config(ctx);
@@ -1368,7 +1370,7 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
 }
 
 bool BrowserPage::acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) {
-    if (url.scheme() == "falkon-set" || url.scheme() == "falkon-action") {
+    if (url.scheme() == "attis-set" || url.scheme() == "attis-action") {
         handle_settings_action(m_ctx, url);
         return false;
     }
@@ -1394,7 +1396,7 @@ static void open_settings_tab(BrowserContext *ctx) {
     if (!ctx || !ctx->tabBar || !ctx->viewStack) return;
 
     for (size_t i = 0; i < ctx->tabs.size(); ++i) {
-        if (ctx->tabs[i].savedUrl == "falkon:settings") {
+        if (ctx->tabs[i].savedUrl == "attis:settings") {
             ctx->tabBar->setCurrentIndex(static_cast<int>(i));
             ctx->viewStack->setCurrentIndex(static_cast<int>(i));
             return;
@@ -1404,14 +1406,14 @@ static void open_settings_tab(BrowserContext *ctx) {
     int curIdx = ctx->tabBar->currentIndex();
     if (curIdx >= 0 && curIdx < static_cast<int>(ctx->tabs.size())) {
         if (ctx->tabs[curIdx].savedUrl.isEmpty() ||
-            ctx->tabs[curIdx].savedUrl == "falkon:home" ||
+            ctx->tabs[curIdx].savedUrl == "attis:home" ||
             ctx->tabs[curIdx].savedUrl == "about:blank") {
-            browser_navigate(ctx, "falkon:settings");
+            browser_navigate(ctx, "attis:settings");
             return;
         }
     }
 
-    browser_add_tab(ctx, "falkon:settings");
+    browser_add_tab(ctx, "attis:settings");
 }
 
 static void show_settings_dialog(BrowserContext *ctx) {
@@ -1507,7 +1509,7 @@ BrowserHandle browser_create(const char* title, int width, int height) {
 
     if (!qApp) {
         static int argc = 1;
-        static char arg0[] = "falkon-rust";
+        static char arg0[] = "attis";
         static char* argv[] = { arg0, nullptr };
         ctx->app = new QApplication(argc, argv);
         ctx->ownApp = true;
@@ -1516,10 +1518,10 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     }
 
     ctx->window = new QMainWindow();
-    ctx->window->setWindowTitle(QString::fromUtf8(title ? title : "Falkon-Rust"));
+    ctx->window->setWindowTitle(QString::fromUtf8(title ? title : "Attis"));
     ctx->window->resize(width > 0 ? width : 1280, height > 0 ? height : 800);
 
-    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/falkon-rust";
+    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis";
     QDir().mkpath(configPath + "/cache");
     QDir().mkpath(configPath + "/storage");
 
@@ -1760,7 +1762,7 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     });
 
     ctx->securityAction = ctx->urlBar->addAction(QIcon(), QLineEdit::LeadingPosition);
-    update_security_indicator(ctx, "falkon:home");
+    update_security_indicator(ctx, "attis:home");
 
     // Trailing Action inside URL Bar: Bookmark Star
     ctx->bookmarkAction = ctx->urlBar->addAction(QIcon(), QLineEdit::TrailingPosition);
@@ -2009,12 +2011,12 @@ BrowserHandle browser_create(const char* title, int width, int height) {
             if (meta.isSuspended && meta.view) {
                 meta.isSuspended = false;
                 if (!meta.savedUrl.isEmpty()) {
-                    if (meta.savedUrl == "falkon:settings") {
+                    if (meta.savedUrl == "attis:settings") {
                         meta.view->page()->setBackgroundColor(Qt::transparent);
-                        meta.view->setHtml(generate_settings_page_html(ctx), QUrl("falkon:settings"));
-                    } else if (meta.savedUrl == "falkon:home") {
+                        meta.view->setHtml(generate_settings_page_html(ctx), QUrl("attis:settings"));
+                    } else if (meta.savedUrl == "attis:home") {
                         meta.view->page()->setBackgroundColor(Qt::transparent);
-                        meta.view->setHtml(generate_start_page_html(ctx), QUrl("falkon:home"));
+                        meta.view->setHtml(generate_start_page_html(ctx), QUrl("attis:home"));
                     } else {
                         meta.view->load(QUrl(meta.savedUrl));
                     }
@@ -2356,7 +2358,7 @@ static int create_tab_internal(BrowserContext *ctx, const char* raw_url, bool is
     if (raw_url && raw_url[0] != '\0') {
         browser_navigate(ctx, raw_url);
     } else {
-        browser_navigate(ctx, "falkon:home");
+        browser_navigate(ctx, "attis:home");
     }
 
     if (is_private) {
@@ -2384,7 +2386,7 @@ void browser_close_tab(BrowserHandle handle, int index) {
         const auto &closingMeta = ctx->tabs[index];
         if (!closingMeta.isPrivate &&
             !closingMeta.savedUrl.isEmpty() &&
-            closingMeta.savedUrl != "falkon:home" &&
+            closingMeta.savedUrl != "attis:home" &&
             closingMeta.savedUrl != "about:blank") {
             ctx->closedTabs.push_back({ closingMeta.savedUrl, closingMeta.savedTitle });
             if (ctx->closedTabs.size() > 25) {
@@ -2409,7 +2411,7 @@ void browser_close_tab(BrowserHandle handle, int index) {
             ctx->tabCloseCallback(index);
         }
     } else if (ctx->tabBar->count() == 1) {
-        browser_navigate(handle, "falkon:home");
+        browser_navigate(handle, "attis:home");
     }
 }
 
@@ -2437,14 +2439,14 @@ void browser_navigate(BrowserHandle handle, const char* raw_url) {
     QString s = QString::fromUtf8(raw_url).trimmed();
     int idx = ctx->tabBar->currentIndex();
 
-    if (s == "falkon:settings" || s == "about:settings") {
+    if (s == "attis:settings" || s == "about:settings") {
         view->page()->setBackgroundColor(Qt::transparent);
-        view->setHtml(generate_settings_page_html(ctx), QUrl("falkon:settings"));
-        ctx->urlBar->setText("falkon:settings");
+        view->setHtml(generate_settings_page_html(ctx), QUrl("attis:settings"));
+        ctx->urlBar->setText("attis:settings");
         update_bookmark_button(ctx, false);
-        update_security_indicator(ctx, "falkon:settings");
+        update_security_indicator(ctx, "attis:settings");
         if (idx >= 0 && idx < static_cast<int>(ctx->tabs.size())) {
-            ctx->tabs[idx].savedUrl = "falkon:settings";
+            ctx->tabs[idx].savedUrl = "attis:settings";
             ctx->tabs[idx].savedTitle = "Pengaturan";
             ctx->tabs[idx].lastActive = QDateTime::currentSecsSinceEpoch();
             ctx->tabs[idx].isSuspended = false;
@@ -2453,17 +2455,17 @@ void browser_navigate(BrowserHandle handle, const char* raw_url) {
         return;
     }
 
-    if (s.isEmpty() || s == "falkon:home" || s == "about:home") {
+    if (s.isEmpty() || s == "attis:home" || s == "about:home") {
         view->page()->setBackgroundColor(Qt::transparent);
-        view->setHtml(generate_start_page_html(ctx), QUrl("falkon:home"));
+        view->setHtml(generate_start_page_html(ctx), QUrl("attis:home"));
         ctx->urlBar->setText("");
         ctx->urlBar->setPlaceholderText(ctx->useGoogleSearch
             ? "Cari di Google atau ketik alamat URL... (Ctrl+L)"
             : "Cari di DuckDuckGo atau ketik alamat URL... (Ctrl+L)");
         update_bookmark_button(ctx, false);
-        update_security_indicator(ctx, "falkon:home");
+        update_security_indicator(ctx, "attis:home");
         if (idx >= 0 && idx < static_cast<int>(ctx->tabs.size())) {
-            ctx->tabs[idx].savedUrl = "falkon:home";
+            ctx->tabs[idx].savedUrl = "attis:home";
             ctx->tabs[idx].savedTitle = ctx->tabs[idx].isPrivate ? "Private Tab" : "New Tab";
             ctx->tabs[idx].lastActive = QDateTime::currentSecsSinceEpoch();
             ctx->tabs[idx].isSuspended = false;

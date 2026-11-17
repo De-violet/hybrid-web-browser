@@ -1,9 +1,9 @@
-use falkon_rust::adblock_engine::{normalize_domain, AdBlockManager};
-use falkon_rust::config::ConfigManager;
-use falkon_rust::history::HistoryManager;
-use falkon_rust::pages::{escape_html, generate_settings_page_html, generate_start_page_html};
-use falkon_rust::tabs::TabManager;
-use falkon_rust::theme::generate_qss;
+use attis::adblock_engine::{normalize_domain, AdBlockManager};
+use attis::config::ConfigManager;
+use attis::history::HistoryManager;
+use attis::pages::{escape_html, generate_settings_page_html, generate_start_page_html};
+use attis::tabs::TabManager;
+use attis::theme::generate_qss;
 
 #[test]
 fn test_builtin_rules_block_tracking() {
@@ -60,7 +60,7 @@ fn test_builtin_rules_block_tracking() {
 fn test_custom_rule_loading_and_cosmetic_css() {
     let mgr = AdBlockManager::new();
 
-    let rule_file = std::env::temp_dir().join("test_falkon_ublock_rules.txt");
+    let rule_file = std::env::temp_dir().join("test_attis_ublock_rules.txt");
     std::fs::write(&rule_file, "||bad-domain.xyz^\n/tracking-pixel.gif$image\n").unwrap();
 
     let loaded = mgr
@@ -88,13 +88,13 @@ fn test_custom_rule_loading_and_cosmetic_css() {
 
 #[test]
 fn test_history_recording_isolated() {
-    let hist_path = std::env::temp_dir().join("test_falkon_history.json");
+    let hist_path = std::env::temp_dir().join("test_attis_history.json");
     let _ = std::fs::remove_file(&hist_path);
 
     let history = HistoryManager::with_path(&hist_path);
     history.record("https://duckduckgo.com", "DuckDuckGo");
     history.record("https://rust-lang.org", "Rust Programming Language");
-    history.record("falkon:home", "New Tab"); // internal page should be ignored
+    history.record("attis:home", "New Tab"); // internal page should be ignored
 
     let items = history.list();
     assert_eq!(items.len(), 2);
@@ -108,11 +108,11 @@ fn test_history_recording_isolated() {
 
 #[test]
 fn test_config_manager_isolated() {
-    let cfg_dir = std::env::temp_dir().join("test_falkon_cfg_dir");
+    let cfg_dir = std::env::temp_dir().join("test_attis_cfg_dir");
     let _ = std::fs::remove_dir_all(&cfg_dir);
 
     let cfg = ConfigManager::load_from_dir(&cfg_dir);
-    assert_eq!(cfg.config.homepage, "falkon:home");
+    assert_eq!(cfg.config.homepage, "attis:home");
     assert!(cfg.config.enable_adblock);
     assert!(!cfg.config.bg_color.is_empty());
 
@@ -159,9 +159,9 @@ fn test_pages_and_theme_generation() {
         true,
         true,
         "/* qss */",
-        "falkon:home",
+        "attis:home",
     );
-    assert!(settings_html.contains("falkon-set://"));
+    assert!(settings_html.contains("attis-set://"));
 
     let qss = generate_qss(
         "#eff1f5", "#e6e9ef", "#4c4f69", "#1e66f5", "#ccd0da", 0.95, "compact", "", "a.svg",

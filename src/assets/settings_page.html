@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pengaturan — Falkon-Rust</title>
+<title>Pengaturan — Attis</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -316,7 +316,7 @@
     <div class="sidebar">
       <div class="sidebar-header">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="@ACCENT@" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        Falkon-Rust
+        Attis
       </div>
       <button class="nav-btn active" onclick="switchTab('general', this)">⚙️ Umum</button>
       <button class="nav-btn" onclick="switchTab('appearance', this)">🎨 Tampilan & Tema</button>
@@ -326,7 +326,7 @@
       <button class="nav-btn" onclick="switchTab('advanced', this)">🧪 Lanjutan & QSS</button>
 
       <div class="sidebar-footer">
-        <strong>Falkon-Rust v0.2</strong><br>
+        <strong>Attis v0.2</strong><br>
         Rust AdBlock Core + Qt6 WebEngine<br>
         Smart Memory &amp; Privacy Guard
       </div>
@@ -342,7 +342,7 @@
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Halaman Beranda</div>
-              <div class="setting-desc">Halaman default saat membuka tab atau jendela baru (contoh: <code>falkon:home</code>)</div>
+              <div class="setting-desc">Halaman default saat membuka tab atau jendela baru (contoh: <code>attis:home</code>)</div>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="text" id="homepageInput" value="@HOMEPAGE@" style="width: 240px;">
@@ -452,8 +452,14 @@
         <h2>Tampilan &amp; Tema</h2>
         <p class="pane-sub">Pilih preset warna modern atau sesuaikan tata letak tab dan kepadatan antarmuka.</p>
         <div class="card">
-          <div class="card-header">Preset Tema (6 Pilihan)</div>
+          <div class="card-header">Preset Tema (7 Pilihan)</div>
           <div class="theme-grid">
+            <div class="theme-card @THEME_VIOLET@" onclick="setTheme('violet')">
+              <div class="theme-preview" style="background:#16102a;">
+                <div style="width:32%;background:#8b5cf6;"></div>
+              </div>
+              <span style="font-size:12.5px;font-weight:600;">Violet</span>
+            </div>
             <div class="theme-card @THEME_DARK@" onclick="setTheme('dark')">
               <div class="theme-preview" style="background:#11111b;">
                 <div style="width:32%;background:#89b4fa;"></div>
@@ -756,7 +762,7 @@
       var qs = Object.keys(params || {}).map(function(k) {
         return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
       }).join('&');
-      var url = 'falkon-set://' + action + (qs ? ('?' + qs) : '');
+      var url = 'attis-set://' + action + (qs ? ('?' + qs) : '');
       showToast('Pengaturan diterapkan');
       window.location.href = url;
     }

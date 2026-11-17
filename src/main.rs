@@ -1,13 +1,13 @@
-use falkon_rust::adblock_engine::AdBlockManager;
-use falkon_rust::bridge::{c_to_str, BrowserApp};
-use falkon_rust::config::ConfigManager;
-use falkon_rust::filter_lists::{
+use attis::adblock_engine::AdBlockManager;
+use attis::bridge::{c_to_str, BrowserApp};
+use attis::config::ConfigManager;
+use attis::filter_lists::{
     is_stale, list_file_path, load_cached_lists, resolve_sources, status_summary, update_lists,
     FilterStatus,
 };
-use falkon_rust::history::HistoryManager;
-use falkon_rust::session::{load_session, save_session, SessionData};
-use falkon_rust::tabs::TabManager;
+use attis::history::HistoryManager;
+use attis::session::{load_session, save_session, SessionData};
+use attis::tabs::TabManager;
 use std::env;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
@@ -231,8 +231,8 @@ extern "C" fn rust_tab_move_callback(from_index: c_int, to_index: c_int) {
 }
 
 fn print_usage() {
-    println!("Falkon-Rust — High-Performance Minimalist Browser with uBlock Origin & Smart Memory");
-    println!("Usage: falkon-rust [OPTIONS] [URL]");
+    println!("Attis — High-Performance Minimalist Browser with uBlock Origin & Smart Memory");
+    println!("Usage: attis [OPTIONS] [URL]");
     println!();
     println!("Options:");
     println!("  --rules <FILE>          Load custom uBlock/EasyList filter rules");
@@ -293,7 +293,7 @@ fn main() {
         return;
     }
     if args.iter().any(|a| a == "--version") {
-        println!("falkon-rust {}", env!("CARGO_PKG_VERSION"));
+        println!("attis {}", env!("CARGO_PKG_VERSION"));
         return;
     }
 
@@ -455,7 +455,7 @@ fn main() {
     let _ = TAB_MGR.set(Mutex::new(tab_manager));
 
     let app = BrowserApp::new(
-        "Falkon-Rust",
+        "Attis",
         cfg_mgr.config.window_width,
         cfg_mgr.config.window_height,
         rust_block_callback,

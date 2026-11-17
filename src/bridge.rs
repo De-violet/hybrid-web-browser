@@ -67,7 +67,7 @@ impl BrowserApp {
             browser_set_block_callback(block_cb);
         }
 
-        let c_title = CString::new(title).unwrap_or_else(|_| CString::new("Falkon-Rust").unwrap());
+        let c_title = CString::new(title).unwrap_or_else(|_| CString::new("Attis").unwrap());
         let handle = unsafe { browser_create(c_title.as_ptr(), width, height) };
 
         Self {
@@ -109,7 +109,7 @@ impl BrowserApp {
     }
 
     pub fn set_theme(&self, theme_name: &str, custom_qss: Option<&str>) {
-        let c_theme = CString::new(theme_name).unwrap_or_else(|_| CString::new("dark").unwrap());
+        let c_theme = CString::new(theme_name).unwrap_or_else(|_| CString::new("violet").unwrap());
         let c_qss = custom_qss.and_then(|q| CString::new(q).ok());
         unsafe {
             browser_set_theme(
@@ -121,9 +121,9 @@ impl BrowserApp {
     }
 
     pub fn set_colors(&self, bg: &str, fg: &str, accent: &str) {
-        let c_bg = CString::new(bg).unwrap_or_else(|_| CString::new("#181825").unwrap());
-        let c_fg = CString::new(fg).unwrap_or_else(|_| CString::new("#cdd6f4").unwrap());
-        let c_accent = CString::new(accent).unwrap_or_else(|_| CString::new("#89b4fa").unwrap());
+        let c_bg = CString::new(bg).unwrap_or_else(|_| CString::new("#16102a").unwrap());
+        let c_fg = CString::new(fg).unwrap_or_else(|_| CString::new("#ddd6fe").unwrap());
+        let c_accent = CString::new(accent).unwrap_or_else(|_| CString::new("#8b5cf6").unwrap());
         unsafe {
             browser_set_colors(self.handle, c_bg.as_ptr(), c_fg.as_ptr(), c_accent.as_ptr());
         }

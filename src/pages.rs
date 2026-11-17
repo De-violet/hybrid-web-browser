@@ -69,8 +69,8 @@ pub fn generate_start_page_html(
         "https://html.duckduckgo.com/html/"
     };
     let engine_label = if is_google { "Google" } else { "DuckDuckGo" };
-    let accent_color = sanitize_css_token(accent, "#89b4fa");
-    let fg_color = sanitize_css_token(fg, "#cdd6f4");
+    let accent_color = sanitize_css_token(accent, "#8b5cf6");
+    let fg_color = sanitize_css_token(fg, "#ddd6fe");
 
     START_PAGE_TPL
         .replace("@FG@", fg_color)
@@ -82,7 +82,7 @@ pub fn generate_start_page_html(
         .replace("@ENGINE_LABEL@", engine_label)
 }
 
-/// Menghasilkan HTML halaman falkon:settings (2-kolom Tab Internal)
+/// Menghasilkan HTML halaman attis:settings (2-kolom Tab Internal)
 #[allow(clippy::too_many_arguments)]
 pub fn generate_settings_page_html(
     theme: &str,
@@ -103,6 +103,11 @@ pub fn generate_settings_page_html(
     homepage: &str,
 ) -> String {
     let cur_theme = theme.to_lowercase();
+    let theme_violet = if cur_theme == "violet" {
+        "selected"
+    } else {
+        ""
+    };
     let theme_dark = if cur_theme == "dark" || cur_theme == "dark_glass" {
         "selected"
     } else {
@@ -173,11 +178,11 @@ pub fn generate_settings_page_html(
         ""
     };
 
-    let fg_color = sanitize_css_token(fg, "#cdd6f4");
-    let accent_color = sanitize_css_token(accent, "#89b4fa");
-    let bg_color = sanitize_css_token(bg, "#181825");
-    let surface_color = sanitize_css_token(surface, "#1e1e2e");
-    let border_color = sanitize_css_token(border, "#313244");
+    let fg_color = sanitize_css_token(fg, "#ddd6fe");
+    let accent_color = sanitize_css_token(accent, "#8b5cf6");
+    let bg_color = sanitize_css_token(bg, "#16102a");
+    let surface_color = sanitize_css_token(surface, "#1e1738");
+    let border_color = sanitize_css_token(border, "#3f2d6b");
 
     let safe_homepage = escape_html(homepage);
     let safe_custom_qss = escape_html(custom_qss);
@@ -206,6 +211,7 @@ pub fn generate_settings_page_html(
         .replace("@BG@", bg_color)
         .replace("@SURFACE@", surface_color)
         .replace("@BORDER@", border_color)
+        .replace("@THEME_VIOLET@", theme_violet)
         .replace("@THEME_DARK@", theme_dark)
         .replace("@THEME_CATPPUCCIN@", theme_catppuccin)
         .replace("@THEME_LIGHT@", theme_light)
@@ -389,34 +395,34 @@ pub unsafe extern "C" fn rust_get_settings_page(
     homepage: *const c_char,
 ) -> *mut c_char {
     let theme_str = if theme.is_null() {
-        "dark"
+        "violet"
     } else {
-        unsafe { CStr::from_ptr(theme).to_str().unwrap_or("dark") }
+        unsafe { CStr::from_ptr(theme).to_str().unwrap_or("violet") }
     };
     let bg_str = if bg.is_null() {
-        "#181825"
+        "#16102a"
     } else {
-        unsafe { CStr::from_ptr(bg).to_str().unwrap_or("#181825") }
+        unsafe { CStr::from_ptr(bg).to_str().unwrap_or("#16102a") }
     };
     let surface_str = if surface.is_null() {
-        "#1e1e2e"
+        "#1e1738"
     } else {
-        unsafe { CStr::from_ptr(surface).to_str().unwrap_or("#1e1e2e") }
+        unsafe { CStr::from_ptr(surface).to_str().unwrap_or("#1e1738") }
     };
     let fg_str = if fg.is_null() {
-        "#cdd6f4"
+        "#ddd6fe"
     } else {
-        unsafe { CStr::from_ptr(fg).to_str().unwrap_or("#cdd6f4") }
+        unsafe { CStr::from_ptr(fg).to_str().unwrap_or("#ddd6fe") }
     };
     let accent_str = if accent.is_null() {
-        "#89b4fa"
+        "#8b5cf6"
     } else {
-        unsafe { CStr::from_ptr(accent).to_str().unwrap_or("#89b4fa") }
+        unsafe { CStr::from_ptr(accent).to_str().unwrap_or("#8b5cf6") }
     };
     let border_str = if border.is_null() {
-        "#313244"
+        "#3f2d6b"
     } else {
-        unsafe { CStr::from_ptr(border).to_str().unwrap_or("#313244") }
+        unsafe { CStr::from_ptr(border).to_str().unwrap_or("#3f2d6b") }
     };
     let density_str = if density.is_null() {
         "comfortable"
@@ -434,9 +440,9 @@ pub unsafe extern "C" fn rust_get_settings_page(
         unsafe { CStr::from_ptr(custom_qss).to_str().unwrap_or("") }
     };
     let homepage_str = if homepage.is_null() {
-        "falkon:home"
+        "attis:home"
     } else {
-        unsafe { CStr::from_ptr(homepage).to_str().unwrap_or("falkon:home") }
+        unsafe { CStr::from_ptr(homepage).to_str().unwrap_or("attis:home") }
     };
 
     let html = generate_settings_page_html(

@@ -1,8 +1,8 @@
 [package]
-name = "falkon-rust"
+name = "attis"
 version = "0.2.0"
 edition = "2021"
-description = "Browser web minimalis hemat RAM: Rust + Qt6 WebEngine dengan pemblokir iklan EasyList/uBlock, Smart Memory tab suspension, dan mode penyamaran."
+description = "Minimalist low-RAM web browser: Rust + Qt6 WebEngine with EasyList/uBlock ad blocking, Smart Memory tab suspension, and private mode."
 license = "GPL-3.0-only"
 repository = "https://github.com/De-violet/web-browser"
 homepage = "https://github.com/De-violet/web-browser"
@@ -11,11 +11,11 @@ categories = ["gui"]
 readme = "README.md"
 
 [lib]
-name = "falkon_rust"
+name = "attis"
 path = "src/lib.rs"
 
 [[bin]]
-name = "falkon-rust"
+name = "attis"
 path = "src/main.rs"
 
 [dependencies]

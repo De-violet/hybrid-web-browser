@@ -1,0 +1,22 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Attis
+GenericName=Web Browser
+Comment=High-Performance Minimalist Web Browser with uBlock Origin & Smart Memory
+Exec=attis %u
+Icon=attis
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;application/xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+StartupWMClass=attis
+Actions=new-window;new-private-window;
+
+[Desktop Action new-window]
+Name=Jendela Baru
+Exec=attis
+
+[Desktop Action new-private-window]
+Name=Jendela Penyamaran Baru (Private)
+Exec=attis --private

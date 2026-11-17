@@ -1,4 +1,4 @@
-use falkon_rust::filter_lists::{
+use attis::filter_lists::{
     count_rules, default_enabled_list_ids, find_list, format_age, is_stale, list_file_path,
     load_cached_lists, read_status, resolve_sources, update_sources, validate_list_content,
     FilterStatus, ListSource, FILTER_LISTS,
@@ -6,7 +6,7 @@ use falkon_rust::filter_lists::{
 
 fn unique_temp_dir(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "falkon_test_{}_{}_{}",
+        "attis_test_{}_{}_{}",
         name,
         std::process::id(),
         std::time::SystemTime::now()
