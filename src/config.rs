@@ -66,10 +66,25 @@ fn default_ui_density() -> String {
     "comfortable".to_string()
 }
 fn default_custom_rules() -> Vec<String> {
-    vec![
-        "||analytics.*^".to_string(),
-        "||telemetry.*^".to_string(),
-    ]
+    vec!["||analytics.*^".to_string(), "||telemetry.*^".to_string()]
+}
+fn default_filter_lists() -> Vec<String> {
+    crate::filter_lists::default_enabled_list_ids()
+}
+fn default_filter_interval() -> u64 {
+    crate::filter_lists::DEFAULT_UPDATE_INTERVAL_HOURS
+}
+fn default_suspend_after() -> u64 {
+    120
+}
+fn default_suspend_many_after() -> u64 {
+    45
+}
+fn default_suspend_threshold() -> usize {
+    3
+}
+fn default_cache_mb() -> u32 {
+    20
 }
 
 pub fn resolve_config_dir() -> PathBuf {
@@ -165,6 +180,63 @@ pub struct BrowserConfig {
 
     #[serde(default = "default_custom_rules")]
     pub custom_rules: Vec<String>,
+
+    // --- Daftar filter adblock ---
+    /// ID daftar filter yang aktif (lihat `filter_lists::FILTER_LISTS`).
+    #[serde(default = "default_filter_lists")]
+    pub filter_lists: Vec<String>,
+
+    /// Perbarui daftar filter yang kedaluwarsa di latar belakang saat startup.
+    #[serde(default = "default_true")]
+    pub filter_auto_update: bool,
+
+    /// Umur cache (jam) sebelum daftar dianggap kedaluwarsa. 0 = manual saja.
+    #[serde(default = "default_filter_interval")]
+    pub filter_update_interval_hours: u64,
+
+    /// URL daftar filter tambahan milik pengguna (harus `https://`).
+    #[serde(default)]
+    pub custom_filter_urls: Vec<String>,
+
+    /// Domain yang dikecualikan dari pemblokiran (mis. `contoh.com`).
+    #[serde(default)]
+    pub adblock_allowlist: Vec<String>,
+
+    // --- Sesi & hemat RAM ---
+    /// Pulihkan tab non-privat dari sesi sebelumnya saat startup.
+    #[serde(default = "default_true")]
+    pub restore_session: bool,
+
+    /// Aktifkan Smart Memory suspension untuk tab latar yang tidak aktif.
+    #[serde(default = "default_true")]
+    pub suspend_enabled: bool,
+
+    /// Tab latar disuspensi setelah tidak aktif selama ini (detik).
+    #[serde(default = "default_suspend_after")]
+    pub suspend_after_seconds: u64,
+
+    /// Ambang lebih cepat saat jumlah tab melebihi `suspend_many_tabs_threshold`.
+    #[serde(default = "default_suspend_many_after")]
+    pub suspend_many_tabs_after_seconds: u64,
+
+    /// Jumlah tab di atas ambang ini memakai `suspend_many_tabs_after_seconds`.
+    #[serde(default = "default_suspend_threshold")]
+    pub suspend_many_tabs_threshold: usize,
+
+    /// Batas HTTP cache memori WebEngine (MiB).
+    #[serde(default = "default_cache_mb")]
+    pub http_cache_size_mb: u32,
+
+    /// Batas proses renderer Chromium (0 = default Qt). Opt-in untuk RAM kecil.
+    #[serde(default)]
+    pub renderer_process_limit: u32,
+}
+
+impl BrowserConfig {
+    /// Batas proses renderer yang sudah di-clamp ke rentang wajar (0-64).
+    pub fn renderer_process_limit_clamped(&self) -> u32 {
+        self.renderer_process_limit.min(64)
+    }
 }
 
 impl Default for BrowserConfig {
@@ -195,6 +267,18 @@ impl Default for BrowserConfig {
             window_width: default_window_width(),
             window_height: default_window_height(),
             custom_rules: default_custom_rules(),
+            filter_lists: default_filter_lists(),
+            filter_auto_update: true,
+            filter_update_interval_hours: default_filter_interval(),
+            custom_filter_urls: Vec::new(),
+            adblock_allowlist: Vec::new(),
+            restore_session: true,
+            suspend_enabled: true,
+            suspend_after_seconds: default_suspend_after(),
+            suspend_many_tabs_after_seconds: default_suspend_many_after(),
+            suspend_many_tabs_threshold: default_suspend_threshold(),
+            http_cache_size_mb: default_cache_mb(),
+            renderer_process_limit: 0,
         }
     }
 }
