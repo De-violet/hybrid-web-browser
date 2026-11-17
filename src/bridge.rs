@@ -125,12 +125,7 @@ impl BrowserApp {
         let c_fg = CString::new(fg).unwrap_or_else(|_| CString::new("#cdd6f4").unwrap());
         let c_accent = CString::new(accent).unwrap_or_else(|_| CString::new("#89b4fa").unwrap());
         unsafe {
-            browser_set_colors(
-                self.handle,
-                c_bg.as_ptr(),
-                c_fg.as_ptr(),
-                c_accent.as_ptr(),
-            );
+            browser_set_colors(self.handle, c_bg.as_ptr(), c_fg.as_ptr(), c_accent.as_ptr());
         }
     }
 
@@ -148,6 +143,10 @@ impl BrowserApp {
     pub fn add_private_tab(&self, url: &str) -> i32 {
         let c_url = CString::new(url).unwrap_or_else(|_| CString::new("").unwrap());
         unsafe { browser_add_private_tab(self.handle, c_url.as_ptr()) }
+    }
+
+    pub fn switch_tab(&self, index: i32) {
+        unsafe { browser_switch_tab(self.handle, index) }
     }
 
     pub fn navigate(&self, url: &str) {
