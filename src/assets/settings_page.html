@@ -376,7 +376,17 @@
         </div>
 
         <div class="card">
-          <div class="card-header">Unduhan &amp; Memori</div>
+          <div class="card-header">Unduhan, Sesi &amp; Memori</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Pulihkan Sesi Saat Startup</div>
+              <div class="setting-desc">Buka kembali tab non-privat dari sesi sebelumnya (disimpan di <code>session.json</code>)</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" @CHK_RESTORE@ onchange="triggerAction('restore_session', { val: this.checked ? '1' : '0' })">
+              <span class="slider"></span>
+            </label>
+          </div>
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Folder Unduhan</div>
@@ -387,9 +397,52 @@
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Smart Memory Cleanup</div>
-              <div class="setting-desc">Suspensi tab latar belakang yang tidak aktif untuk menghemat RAM</div>
+              <div class="setting-desc">Suspensi tab latar belakang yang tidak aktif untuk menghemat RAM. Tab yang sedang memutar audio/video tidak pernah disuspensi.</div>
             </div>
             <button class="btn btn-secondary" onclick="triggerAction('smart_memory', {})">⚡ Bersihkan Sekarang</button>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Aktifkan Smart Memory Otomatis</div>
+              <div class="setting-desc">Suspensi otomatis tab latar yang tidak aktif secara berkala</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" @CHK_SUSPEND@ onchange="triggerAction('suspend_toggle', { val: this.checked ? '1' : '0' })">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Suspensi Setelah Tidak Aktif</div>
+              <div class="setting-desc">Tab latar disuspensi setelah tidak aktif selama (detik, 30–3600)</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <input type="number" id="suspendSecsInput" value="@SUSPEND_SECS@" min="30" max="3600" style="width: 90px;">
+              <button class="btn" onclick="triggerAction('suspend_timeout', { val: document.getElementById('suspendSecsInput').value })">Simpan</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Suspensi Cepat Saat Banyak Tab</div>
+              <div class="setting-desc">Jika tab terbuka melebihi ambang, pakai waktu suspensi yang lebih cepat (detik, 15–600)</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="number" id="suspendManySecsInput" value="@SUSPEND_MANY_SECS@" min="15" max="600" style="width: 80px;">
+              <span style="font-size:12.5px;">detik jika &gt;</span>
+              <input type="number" id="suspendThresholdInput" value="@SUSPEND_THRESHOLD@" min="1" max="20" style="width: 60px;">
+              <span style="font-size:12.5px;">tab</span>
+              <button class="btn" onclick="saveSuspendMany()">Simpan</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Ukuran HTTP Cache Memori</div>
+              <div class="setting-desc">Batas cache memori WebEngine (MiB, 4–512). Berlaku untuk sesi berikutnya sepenuhnya.</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <input type="number" id="cacheMbInput" value="@CACHE_MB@" min="4" max="512" style="width: 90px;">
+              <button class="btn" onclick="triggerAction('cache_size', { val: document.getElementById('cacheMbInput').value })">Simpan</button>
+            </div>
           </div>
         </div>
       </div>
@@ -568,6 +621,33 @@
               <button class="btn btn-secondary" onclick="triggerAction('adblock_badge', { val: '0' })">Sembunyikan</button>
             </div>
           </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Daftar Filter (EasyList, uBlock, ABPindo)</div>
+              <div class="setting-desc">@FILTER_STATUS@</div>
+            </div>
+            <button class="btn" onclick="triggerAction('filter_update', {})">🔄 Perbarui Daftar Filter</button>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Perbarui Filter Otomatis</div>
+              <div class="setting-desc">Unduh daftar yang kedaluwarsa di latar belakang saat startup (interval 24 jam)</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" @CHK_FILTER_AUTO@ onchange="triggerAction('filter_auto', { val: this.checked ? '1' : '0' })">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-title">Allowlist Domain</div>
+              <div class="setting-desc">Domain yang dikecualikan dari pemblokiran, pisahkan dengan koma (contoh: <code>contoh.com, situs-kerja.id</code>). Subdomain ikut dikecualikan.</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="allowlistInput" value="@ALLOWLIST@" placeholder="contoh.com, situs-lain.id" style="width: 240px;">
+              <button class="btn" onclick="saveAllowlist()">Simpan</button>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -690,6 +770,17 @@
     function setSearchEngine(eng) { triggerAction('engine', { val: eng }); }
     function saveHomepage(hp) { triggerAction('homepage', { val: hp }); }
     function saveZoom(z) { triggerAction('zoom', { val: z }); }
+
+    function saveSuspendMany() {
+      triggerAction('suspend_many', {
+        secs: document.getElementById('suspendManySecsInput').value,
+        threshold: document.getElementById('suspendThresholdInput').value
+      });
+    }
+
+    function saveAllowlist() {
+      triggerAction('allowlist_save', { val: document.getElementById('allowlistInput').value });
+    }
 
     function saveTokens() {
       triggerAction('tokens', {
