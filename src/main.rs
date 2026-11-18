@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 use attis::adblock_engine::{read_rule_file_lines, AdBlockManager};
 use attis::bridge::{c_to_str, BrowserApp};
 use attis::config::ConfigManager;
@@ -290,8 +292,122 @@ fn apply_renderer_process_limit(limit: u32) {
     env::set_var("QTWEBENGINE_CHROMIUM_FLAGS", merged);
 }
 
+#[cfg(windows)]
+#[link(name = "kernel32")]
+extern "system" {
+    fn AttachConsole(process_id: u32) -> i32;
+    fn AllocConsole() -> i32;
+    fn SetConsoleOutputCP(code_page: u32) -> i32;
+    fn SetStdHandle(std_handle: i32, handle: *mut std::ffi::c_void) -> i32;
+    fn CreateFileW(
+        file_name: *const u16,
+        desired_access: u32,
+        share_mode: u32,
+        security_attributes: *mut std::ffi::c_void,
+        creation_disposition: u32,
+        flags_and_attributes: u32,
+        template_file: *mut std::ffi::c_void,
+    ) -> *mut std::ffi::c_void;
+}
+
+/// Pastikan mode CLI di Windows memiliki console untuk mencetak output.
+///
+/// Binary memakai subsystem GUI (`windows_subsystem = "windows"`) agar
+/// peluncuran dari Explorer tidak membuka jendela console hitam. Mode
+/// CLI (`--help`, `--version`, `--check`, `--update-filters`,
+/// `--filter-status`, `--rules`) tetap butuh console, jadi fungsi ini
+/// dipanggil sekali di awal `main` hanya bila argumen CLI terdeteksi —
+/// tidak pernah di jalur peluncuran GUI murni. Kegagalan di sini
+/// diabaikan: output console bersifat best-effort.
+#[cfg(windows)]
+fn ensure_console() {
+    const ATTACH_PARENT_PROCESS: u32 = 0xFFFF_FFFF;
+    const STD_INPUT_HANDLE: i32 = -10;
+    const STD_OUTPUT_HANDLE: i32 = -11;
+    const STD_ERROR_HANDLE: i32 = -12;
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const FILE_SHARE_READ: u32 = 0x0000_0001;
+    const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+    const OPEN_EXISTING: u32 = 3;
+    const INVALID_HANDLE_VALUE: *mut std::ffi::c_void = -1isize as *mut std::ffi::c_void;
+
+    // SAFETY: semua pemanggilan memakai konstanta Win32 yang valid.
+    // `CreateFileW` menerima buffer UTF-16 yang null-terminated dan
+    // hidup selama pemanggilan; handle hasil hanya diteruskan ke
+    // `SetStdHandle` (dan sengaja tidak ditutup, karena proses
+    // memilikinya selama hidup). Nilai balik yang menandakan gagal
+    // hanya membuat output console hilang, bukan memori tidak aman.
+    unsafe {
+        // Menempel ke console induk bila ada (dijalankan dari terminal);
+        // bila tidak ada console induk, buat console baru.
+        if AttachConsole(ATTACH_PARENT_PROCESS) == 0 {
+            AllocConsole();
+        }
+        // Output CLI mengandung teks non-ASCII (mis. pesan filter dalam
+        // Bahasa Indonesia); pakai codepage UTF-8 agar tidak mojibake.
+        SetConsoleOutputCP(65001);
+        // `AttachConsole` tidak mengatur ulang handle standar proses,
+        // jadi buka ulang CONOUT$/CONIN$ dan pasang sebagai handle
+        // standar agar println!/eprint! (yang memakai GetStdHandle)
+        // mencapai console. Sesudah `AllocConsole` handle sudah benar,
+        // tetapi memasang ulang secara eksplisit tidak merugikan.
+        let conout: Vec<u16> = "CONOUT$\0".encode_utf16().collect();
+        let out = CreateFileW(
+            conout.as_ptr(),
+            GENERIC_WRITE,
+            FILE_SHARE_WRITE,
+            std::ptr::null_mut(),
+            OPEN_EXISTING,
+            0,
+            std::ptr::null_mut(),
+        );
+        if out != INVALID_HANDLE_VALUE {
+            SetStdHandle(STD_OUTPUT_HANDLE, out);
+            SetStdHandle(STD_ERROR_HANDLE, out);
+        }
+
+        let conin: Vec<u16> = "CONIN$\0".encode_utf16().collect();
+        let inp = CreateFileW(
+            conin.as_ptr(),
+            GENERIC_READ,
+            FILE_SHARE_READ,
+            std::ptr::null_mut(),
+            OPEN_EXISTING,
+            0,
+            std::ptr::null_mut(),
+        );
+        if inp != INVALID_HANDLE_VALUE {
+            SetStdHandle(STD_INPUT_HANDLE, inp);
+        }
+    }
+}
+
+/// Di luar Windows tidak ada console yang perlu disiapkan.
+#[cfg(not(windows))]
+fn ensure_console() {}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+
+    // Mode CLI butuh console di Windows (binary memakai subsystem GUI);
+    // siapkan sebelum output pertama. Peluncuran GUI murni — tanpa
+    // argumen CLI apa pun — tidak pernah menyentuh console.
+    let cli_mode = args.iter().any(|a| {
+        matches!(
+            a.as_str(),
+            "-h" | "--help"
+                | "--version"
+                | "--check"
+                | "--update-filters"
+                | "--filter-status"
+                | "--filters"
+                | "--rules"
+        )
+    });
+    if cli_mode {
+        ensure_console();
+    }
 
     // Help/version ditangani sebelum memuat konfigurasi/mesin agar instan.
     if args.iter().any(|a| a == "-h" || a == "--help") {
@@ -477,6 +593,7 @@ fn main() {
         cfg_mgr.config.window_width,
         cfg_mgr.config.window_height,
         rust_block_callback,
+        &cfg_mgr.dir,
     );
     app.set_tab_callback(rust_tab_callback);
     app.set_tab_close_callback(rust_tab_close_callback);
@@ -504,9 +621,9 @@ fn main() {
         );
     }
 
+    app.set_download_dir(cfg_mgr.config.download_dir_for_ffi());
     let search_engine = search_override.unwrap_or(cfg_mgr.config.search_engine);
     app.set_search_engine(&search_engine);
-    app.set_download_dir(&cfg_mgr.config.download_dir);
     if !cfg_mgr.config.user_agent.is_empty() {
         app.set_user_agent(&cfg_mgr.config.user_agent);
     }

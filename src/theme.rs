@@ -134,10 +134,10 @@ QTabBar::close-button {{
     width: 14px;
     height: 14px;
     background: transparent;
-    image: url({close_icon});
+    image: url("{close_icon}");
 }}
 QTabBar::close-button:hover {{
-    image: url({close_hover});
+    image: url("{close_hover}");
     background-color: {active_hover_overlay};
 }}
 QPushButton#newTabBtn {{

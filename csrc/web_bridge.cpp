@@ -76,6 +76,58 @@ extern "C" {
 
 static RustBlockCallback g_block_cb = nullptr;
 
+// Unified configuration directory, supplied once by the Rust side
+// (resolve_config_dir()) via browser_create. Both sides must read and
+// write the SAME config.json / history.json / bookmarks.json: on
+// Windows the Rust directory (%USERPROFILE%\.config\attis) differs
+// from Qt's ConfigLocation (%APPDATA%\attis), so deriving the
+// directory here from QStandardPaths split the configuration in two
+// and almost every setting reset to defaults on each launch. Empty
+// until browser_create runs; the accessor falls back to the legacy
+// QStandardPaths location when no directory was supplied (null/empty).
+static QString g_config_dir;
+
+static QString attis_config_dir() {
+    if (!g_config_dir.isEmpty()) {
+        return g_config_dir;
+    }
+    return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis";
+}
+
+// One-time migration of user data from the legacy C++ config directory
+// (%APPDATA%\attis on Windows) to the unified directory supplied by
+// Rust. Each file is copied only if it exists in the source and not
+// yet in the target; sources are never overwritten or deleted.
+// Skipped entirely when both directories are the same (always true on
+// Linux, where both sides already used ~/.config/attis). config.json
+// is deliberately NOT migrated: the Rust-side file becomes
+// authoritative, so settings are applied fresh once after upgrading.
+static void migrate_legacy_config_dir(const QString &newDir) {
+    QString legacyDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis";
+    QString cleanNew = QDir::cleanPath(QDir(newDir).absolutePath());
+    QString cleanLegacy = QDir::cleanPath(QDir(legacyDir).absolutePath());
+#ifdef Q_OS_WIN
+    if (cleanNew.compare(cleanLegacy, Qt::CaseInsensitive) == 0) {
+        return;
+    }
+#else
+    if (cleanNew == cleanLegacy) {
+        return;
+    }
+#endif
+    static const char *kMigratedFiles[] = {
+        "bookmarks.json", "user_chrome.qss", "tab_close.svg", "tab_close_hover.svg"
+    };
+    QDir().mkpath(newDir);
+    for (const char *name : kMigratedFiles) {
+        QString src = legacyDir + "/" + QString::fromLatin1(name);
+        QString dst = newDir + "/" + QString::fromLatin1(name);
+        if (QFile::exists(src) && !QFile::exists(dst)) {
+            QFile::copy(src, dst);
+        }
+    }
+}
+
 class BridgeInterceptor : public QWebEngineUrlRequestInterceptor {
 public:
     explicit BridgeInterceptor(QObject *parent = nullptr) : QWebEngineUrlRequestInterceptor(parent) {}
@@ -293,8 +345,8 @@ static QString sanitize_qss_color(const QString &value, const QString &fallback)
 static void apply_theme_qss(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
 
-    QString closeSvg = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/tab_close.svg";
-    QString closeHoverSvg = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/tab_close_hover.svg";
+    QString closeSvg = attis_config_dir() + "/tab_close.svg";
+    QString closeHoverSvg = attis_config_dir() + "/tab_close_hover.svg";
 
     char* rawQss = rust_get_theme_qss(
         ctx->bgColor.toUtf8().constData(),
@@ -737,7 +789,7 @@ static const char* STAR_FILLED_SVG =
 
 static bool is_url_bookmarked(const QString &url) {
     if (url.isEmpty() || url.startsWith("attis:") || url.startsWith("about:")) return false;
-    QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/bookmarks.json";
+    QString bmPath = attis_config_dir() + "/bookmarks.json";
     QFile f(bmPath);
     if (!f.open(QIODevice::ReadOnly)) return false;
     QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
@@ -768,7 +820,7 @@ static void toggle_bookmark_current_page(BrowserContext *ctx) {
     if (title.isEmpty()) title = url;
     if (url.isEmpty() || url.startsWith("attis:") || url.startsWith("about:")) return;
 
-    QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/bookmarks.json";
+    QString bmPath = attis_config_dir() + "/bookmarks.json";
     QFile f(bmPath);
     QJsonArray arr;
     if (f.open(QIODevice::ReadOnly)) {
@@ -818,7 +870,7 @@ static void show_bookmarks_dialog(BrowserContext *ctx) {
 
     auto *listWidget = new QListWidget(&dlg);
 
-    QString bmPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/bookmarks.json";
+    QString bmPath = attis_config_dir() + "/bookmarks.json";
     QFile f(bmPath);
     if (f.open(QIODevice::ReadOnly)) {
         QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
@@ -915,7 +967,7 @@ static void show_history_dialog(BrowserContext *ctx) {
 
     auto *listWidget = new QListWidget(&dlg);
 
-    QString histPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/history.json";
+    QString histPath = attis_config_dir() + "/history.json";
     QFile f(histPath);
     if (f.open(QIODevice::ReadOnly)) {
         QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
@@ -1073,7 +1125,7 @@ static void show_downloads_dialog(BrowserContext *ctx) {
 
 static void save_browser_config(BrowserContext *ctx, const QString &homepage = "") {
     if (!ctx) return;
-    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/config.json";
+    QString configPath = attis_config_dir() + "/config.json";
     QJsonObject root;
     QFile rf(configPath);
     if (rf.open(QIODevice::ReadOnly)) {
@@ -1150,7 +1202,7 @@ static void refresh_internal_tabs(BrowserContext *ctx) {
 static QString generate_settings_page_html(BrowserContext *ctx) {
     if (!ctx) return QString();
     QString hp = "attis:home";
-    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/config.json";
+    QString configPath = attis_config_dir() + "/config.json";
     QFile f(configPath);
     if (f.open(QIODevice::ReadOnly)) {
         QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
@@ -1186,7 +1238,7 @@ static void open_settings_tab(BrowserContext *ctx);
 
 static void save_allowlist_config(BrowserContext *ctx, const QString &csv) {
     if (!ctx) return;
-    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/config.json";
+    QString configPath = attis_config_dir() + "/config.json";
     QJsonObject root;
     QFile rf(configPath);
     if (rf.open(QIODevice::ReadOnly)) {
@@ -1277,7 +1329,7 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
     } else if (action == "custom_qss") {
         QString qss = q.queryItemValue("qss", QUrl::FullyDecoded);
         ctx->customChromeQss = qss;
-        QString userQssPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/user_chrome.qss";
+        QString userQssPath = attis_config_dir() + "/user_chrome.qss";
         QFile f(userQssPath);
         if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
             f.write(qss.toUtf8());
@@ -1306,7 +1358,7 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         ctx->restoreSession = true;
         ctx->filterAutoUpdate = true;
         ctx->customChromeQss = "";
-        QString userQssPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis/user_chrome.qss";
+        QString userQssPath = attis_config_dir() + "/user_chrome.qss";
         QFile::remove(userQssPath);
         apply_theme_qss(ctx);
         save_browser_config(ctx);
@@ -1567,7 +1619,15 @@ private:
     BrowserContext *m_ctx;
 };
 
-BrowserHandle browser_create(const char* title, int width, int height) {
+BrowserHandle browser_create(const char* title, int width, int height, const char* config_dir) {
+    // The Rust side owns the config directory (resolve_config_dir());
+    // record it before anything reads a config file so every C++ path
+    // below resolves to the same directory Rust uses. A null or empty
+    // value keeps the legacy QStandardPaths fallback (defensive).
+    if (config_dir && config_dir[0] != '\0') {
+        g_config_dir = QDir::cleanPath(QString::fromUtf8(config_dir));
+    }
+
     // 1. Ultra-Low RAM & Hardware Acceleration Optimization Flags
     // Gabungkan dengan flag yang sudah disetel sisi Rust/shell (mis.
     // --renderer-process-limit dari config); jangan timpa. Flag
@@ -1605,7 +1665,11 @@ BrowserHandle browser_create(const char* title, int width, int height) {
     ctx->window->setWindowTitle(QString::fromUtf8(title ? title : "Attis"));
     ctx->window->resize(width > 0 ? width : 1280, height > 0 ? height : 800);
 
-    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/attis";
+    QString configPath = attis_config_dir();
+    // One-time migration from the legacy directory (no-op on Linux and
+    // when the directories already match); must run before any config
+    // file is read or written below.
+    migrate_legacy_config_dir(configPath);
     QDir().mkpath(configPath + "/cache");
     QDir().mkpath(configPath + "/storage");
 

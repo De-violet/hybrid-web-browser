@@ -18,6 +18,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The Rust engine and the C++ bridge now share a single configuration
+  directory on every platform: the Rust side passes its resolved
+  config directory to the bridge at startup instead of the bridge
+  deriving a second one from Qt. On Windows the two sides previously
+  used different directories (`%USERPROFILE%\.config\attis` vs
+  `%APPDATA%\attis`), so almost every setting reset to defaults on
+  each launch, the history dialog was always empty, and custom
+  user-agent never applied. On the first run after upgrading,
+  `bookmarks.json` and `user_chrome.qss` are copied once from the old
+  Windows location when not already present; `config.json` is not
+  migrated, so Windows settings are applied fresh once.
+- Release builds now use link-time optimization, a single codegen
+  unit, and stripped symbols (`[profile.release]`), and the build
+  script rebuilds when the Qt location environment variables change.
+- The README now documents the configuration directory per platform.
 - Renamed from Falkon-Rust to Attis: package, binary, library, internal
   page scheme (`attis:home`, `attis:settings`), configuration directory
   (`~/.config/attis/`), desktop entry, and CI artifacts. Configuration
@@ -39,6 +54,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- On Windows, launching Attis no longer opens a black console window
+  next to the browser: the binary now uses the Windows GUI subsystem,
+  while the CLI modes (`--check`, `--version`, `--filter-status`,
+  `--update-filters`, `--rules`, `--help`) attach to the parent
+  console (or allocate one) with UTF-8 output before printing.
+- Fixed the `ResourceType` mapping for WebSocket requests: the code
+  mapped value `20` to `websocket`, but per the Qt 6.7 header `20` is
+  a navigation-preload subframe and WebSocket is `254`, so
+  `$websocket` filter rules never matched. The mapping is now a
+  tested pure function.
+- Tab close-button icons no longer break when the config directory
+  path contains spaces (e.g. a Windows username with a space): the
+  icon paths in the generated stylesheet are now quoted in `url("...")`.
+- A moved Downloads folder is now honored: when the download
+  directory setting is still the default, downloads use the system
+  Downloads location instead of a hardcoded `$HOME/Downloads`.
 - **Security: settings actions can no longer be triggered by websites.**
   Navigations to `attis-set://` URLs are now only honored when they
   originate in the main frame of an internal `attis:` page (the start

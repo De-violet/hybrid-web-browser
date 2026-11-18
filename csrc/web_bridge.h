@@ -15,7 +15,7 @@ typedef void (*RustTabCallback)(int tab_index, const char* url, const char* titl
 typedef void (*RustTabCloseCallback)(int tab_index);
 typedef void (*RustTabMoveCallback)(int from_index, int to_index);
 
-BrowserHandle browser_create(const char* title, int width, int height);
+BrowserHandle browser_create(const char* title, int width, int height, const char* config_dir);
 void browser_set_block_callback(RustBlockCallback cb);
 void browser_set_tab_callback(BrowserHandle handle, RustTabCallback cb);
 void browser_set_tab_close_callback(BrowserHandle handle, RustTabCloseCallback cb);

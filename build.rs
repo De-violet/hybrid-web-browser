@@ -1,6 +1,12 @@
 fn main() {
     println!("cargo:rerun-if-changed=csrc/web_bridge.cpp");
     println!("cargo:rerun-if-changed=csrc/web_bridge.h");
+    // Rebuild when the Qt location changes: the Windows branch reads
+    // these variables to find headers/libraries, and a stale cached
+    // build would otherwise keep linking against the old Qt path.
+    println!("cargo:rerun-if-env-changed=QT_DIR");
+    println!("cargo:rerun-if-env-changed=QT_ROOT_DIR");
+    println!("cargo:rerun-if-env-changed=Qt6_DIR");
 
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
 

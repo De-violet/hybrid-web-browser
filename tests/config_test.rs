@@ -76,6 +76,26 @@ fn test_renderer_process_limit_clamped() {
 }
 
 #[test]
+fn test_download_dir_for_ffi() {
+    // Nilai default -> string kosong (C++ memakai folder Downloads
+    // sistem, sehingga folder yang dipindah pengguna tetap dihormati).
+    let cfg = BrowserConfig::default();
+    assert_eq!(cfg.download_dir_for_ffi(), "");
+    // Nilai kustom dipertahankan apa adanya.
+    let cfg = BrowserConfig {
+        download_dir: "D:\\Unduhan".to_string(),
+        ..BrowserConfig::default()
+    };
+    assert_eq!(cfg.download_dir_for_ffi(), "D:\\Unduhan");
+    // String kosong (mis. ditulis C++ sebelumnya) tetap kosong.
+    let cfg = BrowserConfig {
+        download_dir: String::new(),
+        ..BrowserConfig::default()
+    };
+    assert_eq!(cfg.download_dir_for_ffi(), "");
+}
+
+#[test]
 fn test_settings_extras_from_dir() {
     let dir = unique_temp_dir("extras");
     // Tanpa config.json: nilai bawaan + status "belum pernah".

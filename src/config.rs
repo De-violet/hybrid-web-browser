@@ -242,6 +242,20 @@ impl BrowserConfig {
             n => n.min(64),
         }
     }
+
+    /// Direktori unduhan yang diteruskan ke C++ lewat FFI. String kosong
+    /// berarti "pakai folder Downloads sistem" (C++ memakai
+    /// `QStandardPaths::DownloadLocation` bila menerima string kosong),
+    /// sehingga folder Downloads yang dipindah pengguna tetap dihormati.
+    /// Nilai default maupun string kosong keduanya dipetakan ke "";
+    /// nilai kustom dipertahankan apa adanya.
+    pub fn download_dir_for_ffi(&self) -> &str {
+        if self.download_dir.is_empty() || self.download_dir == default_download_dir() {
+            ""
+        } else {
+            &self.download_dir
+        }
+    }
 }
 
 impl Default for BrowserConfig {

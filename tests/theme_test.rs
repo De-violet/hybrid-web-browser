@@ -151,3 +151,32 @@ fn empty_color_tokens_use_defaults() {
     assert!(out.contains("#8b5cf6"));
     assert!(out.contains("#3f2d6b"));
 }
+
+#[test]
+fn icon_paths_with_spaces_are_quoted_in_qss_urls() {
+    // Path direktori config Windows dapat mengandung spasi (mis. nama
+    // pengguna "John Doe"); URL QSS tanpa quote akan rusak, jadi path
+    // ikon harus muncul dalam tanda kutip.
+    let out = generate_qss(
+        "#16102a",
+        "#1e1738",
+        "#ddd6fe",
+        "#8b5cf6",
+        "#3f2d6b",
+        0.88,
+        "comfortable",
+        "",
+        "C:/Users/John Doe/AppData/Roaming/attis/tab_close.svg",
+        "C:/Users/John Doe/AppData/Roaming/attis/tab_close_hover.svg",
+    );
+    assert!(
+        out.contains("image: url(\"C:/Users/John Doe/AppData/Roaming/attis/tab_close.svg\");"),
+        "got: {out}"
+    );
+    assert!(
+        out.contains(
+            "image: url(\"C:/Users/John Doe/AppData/Roaming/attis/tab_close_hover.svg\");"
+        ),
+        "got: {out}"
+    );
+}

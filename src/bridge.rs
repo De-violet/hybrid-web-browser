@@ -1,5 +1,6 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -11,7 +12,12 @@ pub type RustTabCloseCallback = extern "C" fn(c_int);
 pub type RustTabMoveCallback = extern "C" fn(c_int, c_int);
 
 extern "C" {
-    pub fn browser_create(title: *const c_char, width: c_int, height: c_int) -> BrowserHandle;
+    pub fn browser_create(
+        title: *const c_char,
+        width: c_int,
+        height: c_int,
+        config_dir: *const c_char,
+    ) -> BrowserHandle;
     pub fn browser_set_block_callback(cb: RustBlockCallback);
     pub fn browser_set_tab_callback(handle: BrowserHandle, cb: RustTabCallback);
     pub fn browser_set_tab_close_callback(handle: BrowserHandle, cb: RustTabCloseCallback);
@@ -67,13 +73,26 @@ pub struct BrowserApp {
 }
 
 impl BrowserApp {
-    pub fn new(title: &str, width: i32, height: i32, block_cb: RustBlockCallback) -> Self {
+    /// `config_dir` adalah direktori hasil `resolve_config_dir()`: C++
+    /// memakai direktori yang sama untuk semua file config (config.json,
+    /// history, bookmark, QSS, profil), sehingga kedua sisi tidak lagi
+    /// terbelah di Windows. String kosong membuat C++ fallback ke
+    /// `QStandardPaths` (defensif).
+    pub fn new(
+        title: &str,
+        width: i32,
+        height: i32,
+        block_cb: RustBlockCallback,
+        config_dir: &Path,
+    ) -> Self {
         unsafe {
             browser_set_block_callback(block_cb);
         }
 
         let c_title = CString::new(title).unwrap_or_else(|_| CString::new("Attis").unwrap());
-        let handle = unsafe { browser_create(c_title.as_ptr(), width, height) };
+        let dir_string = config_dir.to_string_lossy();
+        let c_dir = CString::new(dir_string.as_ref()).unwrap_or_else(|_| CString::new("").unwrap());
+        let handle = unsafe { browser_create(c_title.as_ptr(), width, height, c_dir.as_ptr()) };
 
         Self {
             handle,

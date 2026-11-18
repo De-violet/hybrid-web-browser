@@ -147,7 +147,19 @@ Downloads use `curl` (or `wget` as a fallback; on Windows `curl.exe` then PowerS
 
 ## Configuration Directory Layout
 
-All user configuration is stored automatically in `~/.config/attis/` (or `$XDG_CONFIG_HOME/attis/`):
+Attis keeps all of its configuration in a single directory, shared by
+the Rust engine and the Qt interface:
+
+- Linux: `~/.config/attis/` (or `$XDG_CONFIG_HOME/attis/`). Override
+  with the `ATTIS_CONFIG_DIR` environment variable.
+- Windows: `%USERPROFILE%\.config\attis\` (override with
+  `ATTIS_CONFIG_DIR`). On the first run after upgrading from a version
+  before the unified directory, `bookmarks.json` and `user_chrome.qss`
+  are copied once from the previous location (`%APPDATA%\attis\`) when
+  not already present; `config.json` is not migrated, so settings are
+  applied fresh once.
+
+Contents:
 
 - `config.json` — Theme, colors, tab bar position, zoom, homepage preferences, filters, session, and RAM-saving settings.
 - `bookmarks.json` — Bookmarked sites.

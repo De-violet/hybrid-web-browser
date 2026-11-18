@@ -320,6 +320,36 @@ fn store_cached_engine(cache_dir: &Path, hash: u64, engine: &Engine) {
     }
 }
 
+/// Map kode `QWebEngineUrlRequestInfo::ResourceType` (Qt6) ke tipe
+/// request `adblock`. Nilai enum terverifikasi dari header Qt 6.7
+/// (`qwebengineurlrequestinfo.h`):
+/// 0 MainFrame, 1 SubFrame, 2 Stylesheet, 3 Script, 4 Image,
+/// 5 FontResource, 6 SubResource, 7 Object, 8 Media, 9 Worker,
+/// 10 SharedWorker, 11 Prefetch, 12 Favicon, 13 Xhr, 14 Ping,
+/// 15 ServiceWorker, 16 CspReport, 17 PluginResource, 18 tidak dipakai,
+/// 19 NavigationPreloadMainFrame, 20 NavigationPreloadSubFrame,
+/// 21 Json (Qt 6.8+), 254 WebSocket, 255 Unknown.
+/// Kode yang tidak dipetakan eksplisit jatuh ke `"other"`.
+pub fn resource_type_str(code: i32) -> &'static str {
+    match code {
+        0 => "main_frame",
+        1 => "sub_frame",
+        2 => "stylesheet",
+        3 => "script",
+        4 => "image",
+        5 => "font",
+        6 => "subdocument",
+        7 => "object",
+        8 => "media",
+        12 => "image",
+        13 => "xmlhttprequest",
+        14 => "ping",
+        16 => "csp_report",
+        254 => "websocket",
+        _ => "other",
+    }
+}
+
 pub struct AdBlockManager {
     engine: RwLock<Engine>,
     list_contents: RwLock<Vec<String>>,
@@ -514,28 +544,9 @@ impl AdBlockManager {
             return false;
         }
 
-        // Mapping sesuai enum QWebEngineUrlRequestInfo::ResourceType di Qt6:
-        // 0: MainFrame, 1: SubFrame, 2: Stylesheet, 3: Script, 4: Image,
-        // 5: FontResource, 6: SubResource, 7: Object, 8: Media, 9: Worker,
-        // 10: SharedWorker, 11: Prefetch, 12: Favicon, 13: Xhr, 14: Ping,
-        // 15: ServiceWorker, 16: CspReport, 17: PluginResource, 20: WebSocket
-        let req_type = match resource_type {
-            0 => "main_frame",
-            1 => "sub_frame",
-            2 => "stylesheet",
-            3 => "script",
-            4 => "image",
-            5 => "font",
-            6 => "subdocument",
-            7 => "object",
-            8 => "media",
-            12 => "image",
-            13 => "xmlhttprequest",
-            14 => "ping",
-            16 => "csp_report",
-            20 => "websocket",
-            _ => "other",
-        };
+        // Mapping kode ResourceType Qt6 ke tipe request adblock
+        // (lihat `resource_type_str`).
+        let req_type = resource_type_str(resource_type);
 
         if let Ok(req) = Request::new(url, effective_source, req_type, "GET") {
             if let Ok(engine) = self.engine.read() {
@@ -615,6 +626,34 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn test_resource_type_str_mapping() {
+        // Arm yang dipetakan eksplisit.
+        assert_eq!(resource_type_str(0), "main_frame");
+        assert_eq!(resource_type_str(1), "sub_frame");
+        assert_eq!(resource_type_str(2), "stylesheet");
+        assert_eq!(resource_type_str(3), "script");
+        assert_eq!(resource_type_str(4), "image");
+        assert_eq!(resource_type_str(5), "font");
+        assert_eq!(resource_type_str(6), "subdocument");
+        assert_eq!(resource_type_str(7), "object");
+        assert_eq!(resource_type_str(8), "media");
+        assert_eq!(resource_type_str(12), "image");
+        assert_eq!(resource_type_str(13), "xmlhttprequest");
+        assert_eq!(resource_type_str(14), "ping");
+        assert_eq!(resource_type_str(16), "csp_report");
+        // WebSocket adalah 254 (header Qt 6.7), bukan 20.
+        assert_eq!(resource_type_str(254), "websocket");
+        // 19/20 adalah navigation preload, 21 Json (Qt 6.8+), 255
+        // Unknown; semuanya jatuh ke "other", begitu pula kode liar.
+        assert_eq!(resource_type_str(19), "other");
+        assert_eq!(resource_type_str(20), "other");
+        assert_eq!(resource_type_str(21), "other");
+        assert_eq!(resource_type_str(255), "other");
+        assert_eq!(resource_type_str(999), "other");
+        assert_eq!(resource_type_str(-1), "other");
     }
 
     #[test]
