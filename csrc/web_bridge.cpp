@@ -263,6 +263,33 @@ static void update_tab_bar_placement(BrowserContext *ctx) {
     }
 }
 
+// Strict color validation for stylesheets: only `#RGB` / `#RRGGBB` hex
+// colors are accepted; anything else falls back to the given default so
+// a crafted color value can never inject extra QSS rules. The Rust side
+// validates the same way when generating the main theme stylesheet;
+// this helper covers the dialog stylesheets formatted here in C++ and
+// the places that store color values from settings actions, config
+// files, and FFI calls.
+static QString sanitize_qss_color(const QString &value, const QString &fallback) {
+    QString v = value.trimmed();
+    if (v.size() == 4 || v.size() == 7) {
+        if (v.at(0) == '#') {
+            bool allHex = true;
+            for (int i = 1; i < v.size(); ++i) {
+                QChar c = v.at(i);
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                    allHex = false;
+                    break;
+                }
+            }
+            if (allHex) {
+                return v;
+            }
+        }
+    }
+    return fallback;
+}
+
 static void apply_theme_qss(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
 
@@ -325,9 +352,9 @@ void browser_set_theme(BrowserHandle handle, const char* theme_name, const char*
 void browser_set_colors(BrowserHandle handle, const char* bg_color, const char* fg_color, const char* accent_color) {
     auto *ctx = static_cast<BrowserContext*>(handle);
     if (!ctx) return;
-    if (bg_color && bg_color[0] != '\0') ctx->bgColor = QString::fromUtf8(bg_color);
-    if (fg_color && fg_color[0] != '\0') ctx->fgColor = QString::fromUtf8(fg_color);
-    if (accent_color && accent_color[0] != '\0') ctx->accentColor = QString::fromUtf8(accent_color);
+    if (bg_color && bg_color[0] != '\0') ctx->bgColor = sanitize_qss_color(QString::fromUtf8(bg_color), ctx->bgColor);
+    if (fg_color && fg_color[0] != '\0') ctx->fgColor = sanitize_qss_color(QString::fromUtf8(fg_color), ctx->fgColor);
+    if (accent_color && accent_color[0] != '\0') ctx->accentColor = sanitize_qss_color(QString::fromUtf8(accent_color), ctx->accentColor);
     apply_theme_qss(ctx);
 }
 
@@ -624,7 +651,10 @@ static QString generate_start_page_html(BrowserContext *ctx) {
 }
 
 static QString generate_dialog_stylesheet(const QString &bg, const QString &fg, const QString &accent) {
-    QColor bgCol(bg);
+    QString safeBg = sanitize_qss_color(bg, "#16102a");
+    QString safeFg = sanitize_qss_color(fg, "#ddd6fe");
+    QString safeAccent = sanitize_qss_color(accent, "#8b5cf6");
+    QColor bgCol(safeBg);
     bool isLight = bgCol.isValid() && bgCol.lightnessF() > 0.5;
     QString inputBg = isLight ? "rgba(0, 0, 0, 0.04)" : "rgba(255, 255, 255, 0.06)";
     QString borderCol = isLight ? "rgba(0, 0, 0, 0.15)" : "rgba(255, 255, 255, 0.15)";
@@ -692,7 +722,7 @@ QListWidget::item:selected {
     background-color: %3;
     color: %1;
 }
-)").arg(bg, fg, accent, inputBg, borderCol, btnBg, btnHover);
+)").arg(safeBg, safeFg, safeAccent, inputBg, borderCol, btnBg, btnHover);
 }
 
 static const char* STAR_EMPTY_SVG =
@@ -1197,7 +1227,7 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
     } else if (action == "accent_color") {
         QString val = q.queryItemValue("val", QUrl::FullyDecoded).trimmed();
         if (!val.isEmpty()) {
-            ctx->accentColor = val;
+            ctx->accentColor = sanitize_qss_color(val, ctx->accentColor);
             apply_theme_qss(ctx);
             save_browser_config(ctx);
             refresh_internal_tabs(ctx);
@@ -1235,11 +1265,11 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         QString fg = q.queryItemValue("fg", QUrl::FullyDecoded).trimmed();
         QString accent = q.queryItemValue("accent", QUrl::FullyDecoded).trimmed();
         QString border = q.queryItemValue("border", QUrl::FullyDecoded).trimmed();
-        if (!bg.isEmpty()) ctx->bgColor = bg;
-        if (!surface.isEmpty()) ctx->surfaceColor = surface;
-        if (!fg.isEmpty()) ctx->fgColor = fg;
-        if (!accent.isEmpty()) ctx->accentColor = accent;
-        if (!border.isEmpty()) ctx->borderColor = border;
+        if (!bg.isEmpty()) ctx->bgColor = sanitize_qss_color(bg, ctx->bgColor);
+        if (!surface.isEmpty()) ctx->surfaceColor = sanitize_qss_color(surface, ctx->surfaceColor);
+        if (!fg.isEmpty()) ctx->fgColor = sanitize_qss_color(fg, ctx->fgColor);
+        if (!accent.isEmpty()) ctx->accentColor = sanitize_qss_color(accent, ctx->accentColor);
+        if (!border.isEmpty()) ctx->borderColor = sanitize_qss_color(border, ctx->borderColor);
         ctx->currentTheme = "custom";
         apply_theme_qss(ctx);
         save_browser_config(ctx);
@@ -1371,8 +1401,17 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
 }
 
 bool BrowserPage::acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) {
-    if (url.scheme() == "attis-set" || url.scheme() == "attis-action") {
-        handle_settings_action(m_ctx, url);
+    if (url.scheme() == "attis-set") {
+        // Privileged settings actions are only honored for navigations
+        // that originate in the main frame of our own internal attis:
+        // pages (in-page links and script navigation from the start and
+        // settings pages). A website must never be able to trigger them,
+        // so subframe navigations and navigations from web pages are
+        // ignored. The navigation is always rejected, so the page never
+        // actually navigates away or shows an error page.
+        if (isMainFrame && this->url().scheme() == "attis") {
+            handle_settings_action(m_ctx, url);
+        }
         return false;
     }
     return QWebEnginePage::acceptNavigationRequest(url, type, isMainFrame);
@@ -1591,11 +1630,11 @@ BrowserHandle browser_create(const char* title, int width, int height) {
         if (d.isObject()) {
             QJsonObject o = d.object();
             if (o.contains("theme")) ctx->currentTheme = o["theme"].toString();
-            if (o.contains("bg_color")) ctx->bgColor = o["bg_color"].toString();
-            if (o.contains("surface_color")) ctx->surfaceColor = o["surface_color"].toString();
-            if (o.contains("fg_color")) ctx->fgColor = o["fg_color"].toString();
-            if (o.contains("accent_color")) ctx->accentColor = o["accent_color"].toString();
-            if (o.contains("border_color")) ctx->borderColor = o["border_color"].toString();
+            if (o.contains("bg_color")) ctx->bgColor = sanitize_qss_color(o["bg_color"].toString(), ctx->bgColor);
+            if (o.contains("surface_color")) ctx->surfaceColor = sanitize_qss_color(o["surface_color"].toString(), ctx->surfaceColor);
+            if (o.contains("fg_color")) ctx->fgColor = sanitize_qss_color(o["fg_color"].toString(), ctx->fgColor);
+            if (o.contains("accent_color")) ctx->accentColor = sanitize_qss_color(o["accent_color"].toString(), ctx->accentColor);
+            if (o.contains("border_color")) ctx->borderColor = sanitize_qss_color(o["border_color"].toString(), ctx->borderColor);
             if (o.contains("bg_opacity")) ctx->bgOpacity = static_cast<float>(o["bg_opacity"].toDouble(0.88));
             if (o.contains("ui_density")) ctx->uiDensity = o["ui_density"].toString();
             if (o.contains("tab_position")) ctx->tabPosition = o["tab_position"].toString();
@@ -2311,7 +2350,7 @@ static void attach_view_signals(BrowserContext *ctx, QWebEngineView *view) {
             if (ctx->tabCallback) {
                 QByteArray urlB = view->url().toString().toUtf8();
                 QByteArray titleB = title.toUtf8();
-                ctx->tabCallback(idx, urlB.constData(), titleB.constData());
+                ctx->tabCallback(idx, urlB.constData(), titleB.constData(), ctx->tabs[idx].isPrivate ? 1 : 0);
             }
         }
     });
@@ -2328,7 +2367,7 @@ static void attach_view_signals(BrowserContext *ctx, QWebEngineView *view) {
         if (ctx->tabCallback && idx >= 0) {
             QByteArray urlB = url.toString().toUtf8();
             QByteArray titleB = view->title().toUtf8();
-            ctx->tabCallback(idx, urlB.constData(), titleB.constData());
+            ctx->tabCallback(idx, urlB.constData(), titleB.constData(), ctx->tabs[idx].isPrivate ? 1 : 0);
         }
     });
 
@@ -2541,6 +2580,16 @@ void browser_navigate(BrowserHandle handle, const char* raw_url) {
 
     QString s = QString::fromUtf8(raw_url).trimmed();
     int idx = ctx->tabBar->currentIndex();
+
+    // Privileged settings actions must never be reachable by typing a
+    // URL: attis-set:// is only honored for in-page navigations from
+    // attis: pages (see BrowserPage::acceptNavigationRequest). Ignore
+    // it here and restore the URL bar to the current page.
+    if (s.startsWith("attis-set:", Qt::CaseInsensitive) ||
+        s.startsWith("attis-action:", Qt::CaseInsensitive)) {
+        update_url_bar_for_current_tab(ctx);
+        return;
+    }
 
     if (s == "attis:settings" || s == "about:settings") {
         view->page()->setBackgroundColor(Qt::transparent);

@@ -187,19 +187,23 @@ extern "C" fn rust_block_callback(
     }
 }
 
-extern "C" fn rust_tab_callback(tab_index: c_int, url: *const c_char, title: *const c_char) {
+extern "C" fn rust_tab_callback(
+    tab_index: c_int,
+    url: *const c_char,
+    title: *const c_char,
+    is_private_flag: c_int,
+) {
     let url_str = unsafe { c_to_str(url) };
     let title_str = unsafe { c_to_str(title) };
 
-    let mut is_private = false;
-    if let Some(mgr_lock) = TAB_MGR.get() {
-        if let Ok(mut mgr) = mgr_lock.lock() {
-            while mgr.count() <= tab_index as usize {
-                mgr.add("");
-            }
-            mgr.update(tab_index as usize, url_str, title_str);
-            if let Some(tab) = mgr.get(tab_index as usize) {
-                is_private = tab.is_private;
+    // Status privat selalu mengikuti C++ (pemilik tab yang sebenarnya);
+    // nilai ini dipakai bahkan bila TabManager belum tersedia, agar tab
+    // privat tidak pernah tercatat ke history maupun sesi.
+    let mut is_private = is_private_flag != 0;
+    if tab_index >= 0 {
+        if let Some(mgr_lock) = TAB_MGR.get() {
+            if let Ok(mut mgr) = mgr_lock.lock() {
+                is_private = mgr.sync_tab(tab_index as usize, url_str, title_str, is_private);
             }
         }
     }

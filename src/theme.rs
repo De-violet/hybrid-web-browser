@@ -1,6 +1,42 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
+/// Parse warna `#RRGGBB` menjadi komponen RGB.
+///
+/// Mengembalikan `None` untuk input apa pun yang tidak persis 6 digit hex
+/// ASCII — termasuk string non-ASCII, terlalu pendek/panjang, kosong, atau
+/// mengandung karakter non-hex — sehingga pemanggil tidak pernah panic.
+/// Slicing per byte hanya dilakukan setelah seluruh byte dipastikan digit
+/// hex ASCII (satu byte per karakter), jadi indeks byte selalu berada di
+/// batas karakter UTF-8.
+fn parse_hex_rgb(input: &str) -> Option<(u8, u8, u8)> {
+    let hex = input.trim().trim_start_matches('#');
+    let bytes = hex.as_bytes();
+    if bytes.len() != 6 || !bytes.iter().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some((r, g, b))
+}
+
+/// Validasi ketat token warna untuk QSS: hanya `#RGB` atau `#RRGGBB`
+/// (digit hex ASCII) yang diterima; nilai lain diganti fallback. Tanpa
+/// ini, token warna yang dibuat-buat bisa menyuntik aturan QSS tambahan
+/// (mis. menyembunyikan URL bar atau indikator keamanan).
+fn sanitize_color_token<'a>(input: &'a str, fallback: &'a str) -> &'a str {
+    let trimmed = input.trim();
+    let Some(hex) = trimmed.strip_prefix('#') else {
+        return fallback;
+    };
+    if matches!(hex.len(), 3 | 6) && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        trimmed
+    } else {
+        fallback
+    }
+}
+
 /// Menghasilkan Stylesheet QSS Browser Modern (Digunakan langsung oleh C++ Web Bridge)
 pub fn generate_qss(
     bg: &str,
@@ -22,17 +58,9 @@ pub fn generate_qss(
     let url_padding = if is_compact { "5px 14px" } else { "7px 16px" };
     let url_font_size = if is_compact { "13px" } else { "13.5px" };
 
-    // Parse hex bg to RGB + lightness detection
-    let bg_clean = bg.trim().trim_start_matches('#');
-    let (r, g, b) = if bg_clean.len() == 6 {
-        (
-            u8::from_str_radix(&bg_clean[0..2], 16).unwrap_or(22),
-            u8::from_str_radix(&bg_clean[2..4], 16).unwrap_or(16),
-            u8::from_str_radix(&bg_clean[4..6], 16).unwrap_or(42),
-        )
-    } else {
-        (22, 16, 42)
-    };
+    // Parse hex bg to RGB + lightness detection. Input tidak valid
+    // (mis. string non-ASCII) memakai warna default, tidak pernah panic.
+    let (r, g, b) = parse_hex_rgb(bg).unwrap_or((22, 16, 42));
     let luminance = (0.299 * (r as f32) + 0.587 * (g as f32) + 0.114 * (b as f32)) as u32;
     let is_light = luminance > 140;
 
@@ -63,14 +91,10 @@ pub fn generate_qss(
     };
 
     let bg_rgba = format!("rgba({}, {}, {}, {:.2})", r, g, b, op);
-    let surface_col = if surface.is_empty() {
-        "#1e1738"
-    } else {
-        surface
-    };
-    let fg_col = if fg.is_empty() { "#ddd6fe" } else { fg };
-    let accent_col = if accent.is_empty() { "#8b5cf6" } else { accent };
-    let border_col = if border.is_empty() { "#3f2d6b" } else { border };
+    let surface_col = sanitize_color_token(surface, "#1e1738");
+    let fg_col = sanitize_color_token(fg, "#ddd6fe");
+    let accent_col = sanitize_color_token(accent, "#8b5cf6");
+    let border_col = sanitize_color_token(border, "#3f2d6b");
 
     let base_qss = format!(
         r#"

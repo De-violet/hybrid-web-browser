@@ -93,6 +93,33 @@ impl TabManager {
         }
     }
 
+    /// Sinkronisasi state tab dari callback C++.
+    ///
+    /// Slot yang belum dikenal diisi sebagai tab non-privat (privasinya
+    /// belum diketahui; callback tab tersebut nanti mengoreksinya), lalu
+    /// URL/judul DAN status privat tab target diperbarui dari nilai yang
+    /// dikirim C++. Mengembalikan status privat tab target setelah
+    /// sinkronisasi; pemanggil memakai nilai ini untuk memutuskan apakah
+    /// navigasi boleh dicatat ke history dan sesi.
+    pub fn sync_tab(&mut self, index: usize, url: &str, title: &str, is_private: bool) -> bool {
+        while self.tabs.len() <= index {
+            self.add("");
+        }
+        if let Some(tab) = self.tabs.get_mut(index) {
+            if !url.is_empty() {
+                tab.url = url.to_string();
+            }
+            if !title.is_empty() {
+                tab.title = title.to_string();
+            }
+            tab.is_private = is_private;
+        }
+        self.tabs
+            .get(index)
+            .map(|tab| tab.is_private)
+            .unwrap_or(is_private)
+    }
+
     pub fn set_active(&mut self, index: usize) {
         if index < self.tabs.len() {
             self.active_index = index;

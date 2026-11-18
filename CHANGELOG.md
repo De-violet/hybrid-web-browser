@@ -39,6 +39,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Security: settings actions can no longer be triggered by websites.**
+  Navigations to `attis-set://` URLs are now only honored when they
+  originate in the main frame of an internal `attis:` page (the start
+  and settings pages). Subframe navigations, navigations from web
+  pages, and URLs typed into the address bar are ignored. The unused
+  `attis-action` URL alias has been removed.
+- **Privacy: private tabs no longer leak into history and session
+  restore.** The tab callback now carries the tab's private flag from
+  the C++ bridge, so private tabs opened from the UI (menu, shortcut,
+  or popups) are excluded from `history.json` and `session.json`
+  instead of being recorded and restored as normal tabs.
+- Fixed a crash when a theme background color contained non-ASCII
+  characters: hex color parsing now validates each character before
+  parsing instead of slicing the string by byte offsets.
+- Theme color values are now strictly validated (`#RGB` / `#RRGGBB`
+  only) before being inserted into stylesheets, in both the Rust
+  theme generator and the C++ dialog stylesheets, so a crafted color
+  value cannot inject additional stylesheet rules.
 - Hovering a link no longer makes the page jump: the hover-URL/toast
   bar is now a floating overlay anchored to the bottom-left of the
   window instead of a row in the main layout, so showing it cannot

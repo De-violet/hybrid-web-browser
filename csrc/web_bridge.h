@@ -11,7 +11,7 @@ extern "C" {
 typedef void* BrowserHandle;
 
 typedef bool (*RustBlockCallback)(const char* url, int resource_type, const char* source_url);
-typedef void (*RustTabCallback)(int tab_index, const char* url, const char* title);
+typedef void (*RustTabCallback)(int tab_index, const char* url, const char* title, int is_private);
 typedef void (*RustTabCloseCallback)(int tab_index);
 typedef void (*RustTabMoveCallback)(int from_index, int to_index);
 

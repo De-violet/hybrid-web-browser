@@ -6,7 +6,7 @@ use std::sync::Arc;
 pub type BrowserHandle = *mut c_void;
 
 pub type RustBlockCallback = extern "C" fn(*const c_char, c_int, *const c_char) -> bool;
-pub type RustTabCallback = extern "C" fn(c_int, *const c_char, *const c_char);
+pub type RustTabCallback = extern "C" fn(c_int, *const c_char, *const c_char, c_int);
 pub type RustTabCloseCallback = extern "C" fn(c_int);
 pub type RustTabMoveCallback = extern "C" fn(c_int, c_int);
 
