@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pengaturan — Attis</title>
+<title>Settings — Attis</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -312,12 +312,12 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="@ACCENT@" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         Attis
       </div>
-      <button class="nav-btn active" onclick="switchTab('general', this)">Umum</button>
-      <button class="nav-btn" onclick="switchTab('appearance', this)">Tampilan & Tema</button>
-      <button class="nav-btn" onclick="switchTab('search', this)">Pencarian</button>
-      <button class="nav-btn" onclick="switchTab('privacy', this)">Privasi & AdBlock</button>
-      <button class="nav-btn" onclick="switchTab('shortcuts', this)">Pintasan Keyboard</button>
-      <button class="nav-btn" onclick="switchTab('advanced', this)">Lanjutan & QSS</button>
+      <button class="nav-btn active" onclick="switchTab('general', this)">General</button>
+      <button class="nav-btn" onclick="switchTab('appearance', this)">Appearance &amp; Theme</button>
+      <button class="nav-btn" onclick="switchTab('search', this)">Search</button>
+      <button class="nav-btn" onclick="switchTab('privacy', this)">Privacy &amp; AdBlock</button>
+      <button class="nav-btn" onclick="switchTab('shortcuts', this)">Keyboard Shortcuts</button>
+      <button class="nav-btn" onclick="switchTab('advanced', this)">Advanced &amp; QSS</button>
 
       <div class="sidebar-footer">
         <strong>Attis v0.2</strong>
@@ -327,24 +327,24 @@
     <div class="content-area">
       <!-- UMUM -->
       <div id="general" class="tab-pane active">
-        <h2>Pengaturan Umum</h2>
-        <p class="pane-sub">Atur halaman beranda, skala tampilan, dan pengelolaan unduhan.</p>
+        <h2>General Settings</h2>
+        <p class="pane-sub">Set the home page, display scale, and download handling.</p>
         <div class="card">
-          <div class="card-header">Startup &amp; Navigasi</div>
+          <div class="card-header">Startup &amp; Navigation</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Halaman Beranda</div>
-              <div class="setting-desc">Halaman default saat membuka tab atau jendela baru (contoh: <code>attis:home</code>)</div>
+              <div class="setting-title">Home Page</div>
+              <div class="setting-desc">Default page when opening a new tab or window (e.g. <code>attis:home</code>)</div>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="text" id="homepageInput" value="@HOMEPAGE@" style="width: 240px;">
-              <button class="btn" onclick="saveHomepage(document.getElementById('homepageInput').value)">Simpan</button>
+              <button class="btn" onclick="saveHomepage(document.getElementById('homepageInput').value)">Save</button>
             </div>
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Zoom Halaman Bawaan</div>
-              <div class="setting-desc">Skala perbesaran teks dan elemen halaman web</div>
+              <div class="setting-title">Default Page Zoom</div>
+              <div class="setting-desc">Scale for text and page elements</div>
             </div>
             <select onchange="saveZoom(this.value)">
               <option value="0.8" @ZOOM_08@>80%</option>
@@ -357,22 +357,22 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Tombol Navigasi Toolbar</div>
-              <div class="setting-desc">Tampilkan tombol Back, Forward, dan Reload di bilah alamat</div>
+              <div class="setting-title">Toolbar Navigation Buttons</div>
+              <div class="setting-desc">Show the Back, Forward, and Reload buttons in the address bar</div>
             </div>
             <div style="display:flex;gap:8px;">
-              <button class="btn btn-secondary" onclick="triggerAction('nav_buttons', { val: '1' })">Tampilkan</button>
-              <button class="btn btn-secondary" onclick="triggerAction('nav_buttons', { val: '0' })">Sembunyikan</button>
+              <button class="btn btn-secondary" onclick="triggerAction('nav_buttons', { val: '1' })">Show</button>
+              <button class="btn btn-secondary" onclick="triggerAction('nav_buttons', { val: '0' })">Hide</button>
             </div>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-header">Unduhan, Sesi &amp; Memori</div>
+          <div class="card-header">Downloads, Session &amp; Memory</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Pulihkan Sesi Saat Startup</div>
-              <div class="setting-desc">Buka kembali tab non-privat dari sesi sebelumnya (disimpan di <code>session.json</code>)</div>
+              <div class="setting-title">Restore Session on Startup</div>
+              <div class="setting-desc">Reopen non-private tabs from the previous session (stored in <code>session.json</code>)</div>
             </div>
             <label class="switch">
               <input type="checkbox" @CHK_RESTORE@ onchange="triggerAction('restore_session', { val: this.checked ? '1' : '0' })">
@@ -381,22 +381,22 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Folder Unduhan</div>
-              <div class="setting-desc">Buka direktori penyimpanan file yang diunduh</div>
+              <div class="setting-title">Downloads Folder</div>
+              <div class="setting-desc">Open the directory where downloaded files are stored</div>
             </div>
-            <button class="btn btn-secondary" onclick="triggerAction('open_downloads', {})">Buka Folder Unduhan</button>
+            <button class="btn btn-secondary" onclick="triggerAction('open_downloads', {})">Open Downloads Folder</button>
           </div>
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Smart Memory Cleanup</div>
-              <div class="setting-desc">Suspensi tab latar belakang yang tidak aktif untuk menghemat RAM. Tab yang sedang memutar audio/video tidak pernah disuspensi.</div>
+              <div class="setting-desc">Suspend inactive background tabs to save RAM. Tabs playing audio/video are never suspended.</div>
             </div>
-            <button class="btn btn-secondary" onclick="triggerAction('smart_memory', {})">Bersihkan Sekarang</button>
+            <button class="btn btn-secondary" onclick="triggerAction('smart_memory', {})">Clean Up Now</button>
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Aktifkan Smart Memory Otomatis</div>
-              <div class="setting-desc">Suspensi otomatis tab latar yang tidak aktif secara berkala</div>
+              <div class="setting-title">Enable Automatic Smart Memory</div>
+              <div class="setting-desc">Automatically suspend inactive background tabs periodically</div>
             </div>
             <label class="switch">
               <input type="checkbox" @CHK_SUSPEND@ onchange="triggerAction('suspend_toggle', { val: this.checked ? '1' : '0' })">
@@ -405,35 +405,35 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Suspensi Setelah Tidak Aktif</div>
-              <div class="setting-desc">Tab latar disuspensi setelah tidak aktif selama (detik, 30–3600)</div>
+              <div class="setting-title">Suspend After Inactive</div>
+              <div class="setting-desc">Background tabs are suspended after being inactive for (seconds, 30–3600)</div>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="number" id="suspendSecsInput" value="@SUSPEND_SECS@" min="30" max="3600" style="width: 90px;">
-              <button class="btn" onclick="triggerAction('suspend_timeout', { val: document.getElementById('suspendSecsInput').value })">Simpan</button>
+              <button class="btn" onclick="triggerAction('suspend_timeout', { val: document.getElementById('suspendSecsInput').value })">Save</button>
             </div>
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Suspensi Cepat Saat Banyak Tab</div>
-              <div class="setting-desc">Jika tab terbuka melebihi ambang, pakai waktu suspensi yang lebih cepat (detik, 15–600)</div>
+              <div class="setting-title">Fast Suspend With Many Tabs</div>
+              <div class="setting-desc">If open tabs exceed the threshold, use a faster suspend time (seconds, 15–600)</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
               <input type="number" id="suspendManySecsInput" value="@SUSPEND_MANY_SECS@" min="15" max="600" style="width: 80px;">
-              <span style="font-size:12.5px;">detik jika &gt;</span>
+              <span style="font-size:12.5px;white-space:nowrap;">seconds if more than</span>
               <input type="number" id="suspendThresholdInput" value="@SUSPEND_THRESHOLD@" min="1" max="20" style="width: 60px;">
-              <span style="font-size:12.5px;">tab</span>
-              <button class="btn" onclick="saveSuspendMany()">Simpan</button>
+              <span style="font-size:12.5px;">tabs</span>
+              <button class="btn" onclick="saveSuspendMany()">Save</button>
             </div>
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Ukuran HTTP Cache Memori</div>
-              <div class="setting-desc">Batas cache memori WebEngine (MiB, 4–512). Berlaku untuk sesi berikutnya sepenuhnya.</div>
+              <div class="setting-title">HTTP Memory Cache Size</div>
+              <div class="setting-desc">WebEngine memory cache limit (MiB, 4–512). Applies fully from the next session.</div>
             </div>
             <div style="display:flex;gap:8px;">
               <input type="number" id="cacheMbInput" value="@CACHE_MB@" min="4" max="512" style="width: 90px;">
-              <button class="btn" onclick="triggerAction('cache_size', { val: document.getElementById('cacheMbInput').value })">Simpan</button>
+              <button class="btn" onclick="triggerAction('cache_size', { val: document.getElementById('cacheMbInput').value })">Save</button>
             </div>
           </div>
         </div>
@@ -441,10 +441,10 @@
 
       <!-- TAMPILAN & TEMA -->
       <div id="appearance" class="tab-pane">
-        <h2>Tampilan &amp; Tema</h2>
-        <p class="pane-sub">Pilih preset warna modern atau sesuaikan tata letak tab dan kepadatan antarmuka.</p>
+        <h2>Appearance &amp; Theme</h2>
+        <p class="pane-sub">Pick a modern color preset, or adjust tab layout and interface density.</p>
         <div class="card">
-          <div class="card-header">Preset Tema (7 Pilihan)</div>
+          <div class="card-header">Theme Presets (7 Choices)</div>
           <div class="theme-grid">
             <div class="theme-card @THEME_VIOLET@" onclick="setTheme('violet')">
               <div class="theme-preview" style="background:#121214;">
@@ -492,49 +492,49 @@
         </div>
 
         <div class="card">
-          <div class="card-header">Kustomisasi Cepat</div>
+          <div class="card-header">Quick Customization</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Warna Aksen</div>
-              <div class="setting-desc">Warna indikator tab aktif, fokus URL bar, dan tombol utama</div>
+              <div class="setting-title">Accent Color</div>
+              <div class="setting-desc">Color of the active-tab indicator, URL bar focus, and main buttons</div>
             </div>
             <input type="color" value="@ACCENT@" onchange="setAccent(this.value)">
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Transparansi Latar</div>
-              <div class="setting-desc">Tingkat opasitas jendela browser (<span id="opVal">@OPACITY_PCT@%</span>)</div>
+              <div class="setting-title">Background Opacity</div>
+              <div class="setting-desc">Browser window opacity level (<span id="opVal">@OPACITY_PCT@%</span>)</div>
             </div>
             <input type="range" min="20" max="100" value="@OPACITY_PCT@" oninput="document.getElementById('opVal').textContent=this.value+'%';" onchange="setOpacity(this.value)">
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Posisi Tab Bar</div>
-              <div class="setting-desc">Tata letak bar tab di bagian atas, bawah, atau tersembunyi (Zen Mode)</div>
+              <div class="setting-title">Tab Bar Position</div>
+              <div class="setting-desc">Tab bar layout at the top, bottom, or hidden (Zen Mode)</div>
             </div>
             <select onchange="setTabPos(this.value)">
-              <option value="top" @OPT_TOP@>Atas (Standar)</option>
-              <option value="bottom" @OPT_BOTTOM@>Bawah (Ergonomis)</option>
-              <option value="hidden" @OPT_HIDDEN@>Tersembunyi (Fokus Penuh)</option>
+              <option value="top" @OPT_TOP@>Top (Standard)</option>
+              <option value="bottom" @OPT_BOTTOM@>Bottom (Ergonomic)</option>
+              <option value="hidden" @OPT_HIDDEN@>Hidden (Full Focus)</option>
             </select>
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Kepadatan UI</div>
-              <div class="setting-desc">Ukuran ruang padding pada tab bar dan bilah navigasi</div>
+              <div class="setting-title">UI Density</div>
+              <div class="setting-desc">Padding size on the tab bar and navigation bar</div>
             </div>
             <select onchange="setDensity(this.value)">
-              <option value="comfortable" @OPT_COMFORTABLE@>Nyaman (Comfortable)</option>
-              <option value="compact" @OPT_COMPACT@>Padat (Compact)</option>
+              <option value="comfortable" @OPT_COMFORTABLE@>Comfortable</option>
+              <option value="compact" @OPT_COMPACT@>Compact</option>
             </select>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-header">Elemen Halaman Tab Baru (Start Page)</div>
+          <div class="card-header">New Tab Page Elements</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Jam Digital &amp; Sambutan Waktu</div>
+              <div class="setting-title">Digital Clock</div>
             </div>
             <label class="switch">
               <input type="checkbox" @CHK_CLOCK@ onchange="toggleHomeElem('clock', this.checked)">
@@ -543,7 +543,7 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Bilah Pencarian &amp; Pintasan Bang</div>
+              <div class="setting-title">Search Bar &amp; Bang Shortcuts</div>
             </div>
             <label class="switch">
               <input type="checkbox" @CHK_SEARCH@ onchange="toggleHomeElem('search', this.checked)">
@@ -552,7 +552,7 @@
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Shortcut Tiles (Akses Cepat)</div>
+              <div class="setting-title">Shortcut Tiles (Quick Access)</div>
             </div>
             <label class="switch">
               <input type="checkbox" @CHK_TILES@ onchange="toggleHomeElem('tiles', this.checked)">
@@ -564,59 +564,59 @@
 
       <!-- PENCARIAN -->
       <div id="search" class="tab-pane">
-        <h2>Mesin Pencari</h2>
-        <p class="pane-sub">Pilih mesin pencari utama atau gunakan bang prefix langsung dari URL bar.</p>
+        <h2>Search Engine</h2>
+        <p class="pane-sub">Choose the main search engine, or use bang prefixes straight from the URL bar.</p>
         <div class="card">
-          <div class="card-header">Mesin Pencari Default</div>
+          <div class="card-header">Default Search Engine</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Mesin Pencari Aktif</div>
-              <div class="setting-desc">Digunakan saat mengetik kueri di URL bar atau halaman Tab Baru</div>
+              <div class="setting-title">Active Search Engine</div>
+              <div class="setting-desc">Used when typing a query in the URL bar or the New Tab page</div>
             </div>
             <select onchange="setSearchEngine(this.value)">
               <option value="google" @ENGINE_GOOGLE@>Google Search</option>
-              <option value="duckduckgo" @ENGINE_DDG@>DuckDuckGo HTML (Hemat RAM)</option>
+              <option value="duckduckgo" @ENGINE_DDG@>DuckDuckGo HTML (Low RAM)</option>
             </select>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-header">Pintasan Bang di Address Bar</div>
+          <div class="card-header">Bang Shortcuts in the Address Bar</div>
           <div class="setting-desc" style="line-height:1.7;">
-            Ketik awalan berikut di URL bar atau kotak pencarian Tab Baru:<br>
-            • <code>!g kata kunci</code> — Cari langsung di Google<br>
-            • <code>!d kata kunci</code> — Cari langsung di DuckDuckGo<br>
-            • <code>!gh repo</code> — Cari repositori di GitHub<br>
-            • <code>!yt video</code> — Cari video di YouTube<br>
-            • <code>!w topik</code> — Cari artikel di Wikipedia
+            Type these prefixes in the URL bar or the New Tab search box:<br>
+            • <code>!g kata kunci</code> — Search Google directly<br>
+            • <code>!d kata kunci</code> — Search DuckDuckGo directly<br>
+            • <code>!gh repo</code> — Search repositories on GitHub<br>
+            • <code>!yt video</code> — Search videos on YouTube<br>
+            • <code>!w topik</code> — Search articles on Wikipedia
           </div>
         </div>
       </div>
 
       <!-- PRIVASI -->
       <div id="privacy" class="tab-pane">
-        <h2>Privasi &amp; Keamanan</h2>
-        <p class="pane-sub">Kontrol pemblokir iklan uBlock Origin berbasis Rust serta data penjelajahan lokal.</p>
+        <h2>Privacy &amp; Security</h2>
+        <p class="pane-sub">Control the Rust-based uBlock Origin ad blocker and local browsing data.</p>
         <div class="card">
           <div class="card-header">uBlock Origin Engine (Rust Native)</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Pemblokir Iklan &amp; Pelacak</div>
-              <div class="setting-desc">Memfilter request iklan dan tracker sebelum menyentuh jaringan</div>
+              <div class="setting-title">Ad &amp; Tracker Blocker</div>
+              <div class="setting-desc">Filter ad and tracker requests before they reach the network</div>
             </div>
             <div style="display:flex;gap:8px;">
-              <button class="btn" onclick="triggerAction('adblock_enable', { val: '1' })">Aktifkan</button>
-              <button class="btn btn-secondary" onclick="triggerAction('adblock_enable', { val: '0' })">Nonaktifkan</button>
+              <button class="btn" onclick="triggerAction('adblock_enable', { val: '1' })">Enable</button>
+              <button class="btn btn-secondary" onclick="triggerAction('adblock_enable', { val: '0' })">Disable</button>
             </div>
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Lencana Penghitung Blokir (Badge)</div>
-              <div class="setting-desc">Tampilkan jumlah elemen yang diblokir di sebelah kanan URL bar</div>
+              <div class="setting-title">Block Count Badge</div>
+              <div class="setting-desc">Show the number of blocked elements to the right of the URL bar</div>
             </div>
             <div style="display:flex;gap:8px;">
-              <button class="btn btn-secondary" onclick="triggerAction('adblock_badge', { val: '1' })">Tampilkan</button>
-              <button class="btn btn-secondary" onclick="triggerAction('adblock_badge', { val: '0' })">Sembunyikan</button>
+              <button class="btn btn-secondary" onclick="triggerAction('adblock_badge', { val: '1' })">Show</button>
+              <button class="btn btn-secondary" onclick="triggerAction('adblock_badge', { val: '0' })">Hide</button>
             </div>
           </div>
           <div class="setting-row">
@@ -624,12 +624,12 @@
               <div class="setting-title">Daftar Filter (EasyList, uBlock, ABPindo)</div>
               <div class="setting-desc">@FILTER_STATUS@</div>
             </div>
-            <button class="btn" onclick="triggerAction('filter_update', {})">Perbarui Daftar Filter</button>
+            <button class="btn" onclick="triggerAction('filter_update', {})">Update Filter Lists</button>
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Perbarui Filter Otomatis</div>
-              <div class="setting-desc">Unduh daftar yang kedaluwarsa di latar belakang saat startup (interval 24 jam)</div>
+              <div class="setting-title">Auto-Update Filters</div>
+              <div class="setting-desc">Download expired lists in the background at startup (24-hour interval)</div>
             </div>
             <label class="switch">
               <input type="checkbox" @CHK_FILTER_AUTO@ onchange="triggerAction('filter_auto', { val: this.checked ? '1' : '0' })">
@@ -639,63 +639,63 @@
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Allowlist Domain</div>
-              <div class="setting-desc">Domain yang dikecualikan dari pemblokiran, pisahkan dengan koma (contoh: <code>contoh.com, situs-kerja.id</code>). Subdomain ikut dikecualikan.</div>
+              <div class="setting-desc">Domains excluded from blocking, separated by commas (e.g. <code>example.com, work-site.com</code>). Subdomains are excluded too.</div>
             </div>
             <div style="display:flex;gap:8px;">
-              <input type="text" id="allowlistInput" value="@ALLOWLIST@" placeholder="contoh.com, situs-lain.id" style="width: 240px;">
-              <button class="btn" onclick="saveAllowlist()">Simpan</button>
+              <input type="text" id="allowlistInput" value="@ALLOWLIST@" placeholder="example.com, other-site.com" style="width: 240px;">
+              <button class="btn" onclick="saveAllowlist()">Save</button>
             </div>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-header">Data Penjelajahan</div>
+          <div class="card-header">Browsing Data</div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Bersihkan Riwayat Kunjungan</div>
-              <div class="setting-desc">Hapus seluruh catatan di <code>history.json</code></div>
+              <div class="setting-title">Clear Browsing History</div>
+              <div class="setting-desc">Delete all records in <code>history.json</code></div>
             </div>
-            <button class="btn btn-secondary" onclick="triggerAction('clear_history', {})">Hapus Riwayat</button>
+            <button class="btn btn-secondary" onclick="triggerAction('clear_history', {})">Clear History</button>
           </div>
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-title">Bersihkan HTTP Cache</div>
-              <div class="setting-desc">Kosongkan cache memori dan disk WebEngine</div>
+              <div class="setting-title">Clear HTTP Cache</div>
+              <div class="setting-desc">Empty the WebEngine memory and disk cache</div>
             </div>
-            <button class="btn btn-secondary" onclick="triggerAction('clear_cache', {})">Bersihkan Cache</button>
+            <button class="btn btn-secondary" onclick="triggerAction('clear_cache', {})">Clear Cache</button>
           </div>
         </div>
       </div>
 
       <!-- SHORTCUTS -->
       <div id="shortcuts" class="tab-pane">
-        <h2>Pintasan Keyboard</h2>
-        <p class="pane-sub">Navigasi cepat tanpa melepas tangan dari keyboard.</p>
+        <h2>Keyboard Shortcuts</h2>
+        <p class="pane-sub">Navigate fast without leaving the keyboard.</p>
         <div class="card">
-          <div class="card-header">Daftar Pintasan Utama</div>
+          <div class="card-header">Main Shortcuts</div>
           <div class="shortcut-grid">
-            <div class="shortcut-item"><span>Tab Baru</span><span class="kbd">Ctrl + T</span></div>
-            <div class="shortcut-item"><span>Tab Penyamaran (Private)</span><span class="kbd">Ctrl + Shift + N</span></div>
-            <div class="shortcut-item"><span>Tutup Tab Aktif</span><span class="kbd">Ctrl + W</span></div>
-            <div class="shortcut-item"><span>Pulihkan Tab Tertutup</span><span class="kbd">Ctrl + Shift + T</span></div>
-            <div class="shortcut-item"><span>Fokus Address Bar</span><span class="kbd">Ctrl + L</span></div>
-            <div class="shortcut-item"><span>Cari di Halaman (Find Bar)</span><span class="kbd">Ctrl + F</span></div>
-            <div class="shortcut-item"><span>Tambah / Hapus Bookmark</span><span class="kbd">Ctrl + D</span></div>
-            <div class="shortcut-item"><span>Daftar Bookmark</span><span class="kbd">Ctrl + B</span></div>
-            <div class="shortcut-item"><span>Riwayat Penjelajahan</span><span class="kbd">Ctrl + H</span></div>
-            <div class="shortcut-item"><span>Folder Unduhan</span><span class="kbd">Ctrl + J</span></div>
-            <div class="shortcut-item"><span>Mode Minimal (Toggle Nav)</span><span class="kbd">Ctrl + M</span></div>
-            <div class="shortcut-item"><span>Layar Penuh</span><span class="kbd">F11</span></div>
+            <div class="shortcut-item"><span>New Tab</span><span class="kbd">Ctrl + T</span></div>
+            <div class="shortcut-item"><span>Private Tab (Incognito)</span><span class="kbd">Ctrl + Shift + N</span></div>
+            <div class="shortcut-item"><span>Close Active Tab</span><span class="kbd">Ctrl + W</span></div>
+            <div class="shortcut-item"><span>Restore Closed Tab</span><span class="kbd">Ctrl + Shift + T</span></div>
+            <div class="shortcut-item"><span>Focus Address Bar</span><span class="kbd">Ctrl + L</span></div>
+            <div class="shortcut-item"><span>Find in Page (Find Bar)</span><span class="kbd">Ctrl + F</span></div>
+            <div class="shortcut-item"><span>Add / Remove Bookmark</span><span class="kbd">Ctrl + D</span></div>
+            <div class="shortcut-item"><span>Bookmarks List</span><span class="kbd">Ctrl + B</span></div>
+            <div class="shortcut-item"><span>Browsing History</span><span class="kbd">Ctrl + H</span></div>
+            <div class="shortcut-item"><span>Downloads Folder</span><span class="kbd">Ctrl + J</span></div>
+            <div class="shortcut-item"><span>Minimal Mode (Toggle Nav)</span><span class="kbd">Ctrl + M</span></div>
+            <div class="shortcut-item"><span>Full Screen</span><span class="kbd">F11</span></div>
           </div>
         </div>
       </div>
 
       <!-- LANJUTAN -->
       <div id="advanced" class="tab-pane">
-        <h2>Kustomisasi Lanjutan</h2>
-        <p class="pane-sub">Edit token warna secara spesifik atau tambahkan aturan Qt Style Sheet (QSS) kustom.</p>
+        <h2>Advanced Customization</h2>
+        <p class="pane-sub">Edit color tokens precisely, or add custom Qt Style Sheet (QSS) rules.</p>
         <div class="card">
-          <div class="card-header">Token Warna Hex</div>
+          <div class="card-header">Hex Color Tokens</div>
           <div class="setting-row">
             <span>Background</span>
             <input type="text" id="token_bg" value="@BG@" style="width:150px;">
@@ -716,28 +716,28 @@
             <span>Border</span>
             <input type="text" id="token_border" value="@BORDER@" style="width:150px;">
           </div>
-          <button class="btn" onclick="saveTokens()">Terapkan Token Warna</button>
+          <button class="btn" onclick="saveTokens()">Apply Color Tokens</button>
         </div>
 
         <div class="card">
           <div class="card-header">Custom Chrome QSS (<code>user_chrome.qss</code>)</div>
-          <textarea id="customQssBox" placeholder="/* Masukkan style QSS custom untuk antarmuka Qt di sini */">@CUSTOM_QSS@</textarea>
+          <textarea id="customQssBox" placeholder="/* Enter custom QSS styles for the Qt interface here */">@CUSTOM_QSS@</textarea>
           <div style="display:flex;gap:10px;">
-            <button class="btn" onclick="applyCustomQss()">Terapkan Custom QSS</button>
-            <button class="btn btn-secondary" onclick="resetDefaults()">Reset ke Pengaturan Awal</button>
+            <button class="btn" onclick="applyCustomQss()">Apply Custom QSS</button>
+            <button class="btn btn-secondary" onclick="resetDefaults()">Reset to Default Settings</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="toast" class="toast">Pengaturan disimpan</div>
+  <div id="toast" class="toast">Settings saved</div>
 
   <script>
     function showToast(msg) {
       var t = document.getElementById('toast');
       if (!t) return;
-      t.textContent = msg || 'Pengaturan diterapkan';
+      t.textContent = msg || 'Settings applied';
       t.classList.add('show');
       setTimeout(function() { t.classList.remove('show'); }, 1800);
     }
@@ -755,7 +755,7 @@
         return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
       }).join('&');
       var url = 'attis-set://' + action + (qs ? ('?' + qs) : '');
-      showToast('Pengaturan diterapkan');
+      showToast('Settings applied');
       window.location.href = url;
     }
 
@@ -796,7 +796,7 @@
     }
 
     function resetDefaults() {
-      if (confirm('Pulihkan semua pengaturan browser ke kondisi awal?')) {
+      if (confirm('Restore all browser settings to their initial state?')) {
         triggerAction('reset_defaults', {});
       }
     }

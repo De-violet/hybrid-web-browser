@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tab Baru</title>
+<title>New Tab</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -151,23 +151,6 @@
     text-overflow: ellipsis;
     max-width: 100px;
   }
-  .footer-bar {
-    position: fixed;
-    bottom: 16px;
-    display: flex;
-    gap: 20px;
-    z-index: 1;
-  }
-  .footer-pill {
-    text-decoration: none;
-    color: @FG@;
-    opacity: 0.55;
-    font-size: 12px;
-    padding: 0;
-  }
-  .footer-pill:hover {
-    opacity: 1;
-  }
 </style>
 </head>
 <body>
@@ -181,9 +164,9 @@
         <circle cx="11" cy="11" r="8"></circle>
         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
       </svg>
-      <input type="text" id="searchInput" name="q" placeholder="Cari di @ENGINE_LABEL@ atau ketik alamat web..." autofocus autocomplete="off" />
+      <input type="text" id="searchInput" name="q" placeholder="Search @ENGINE_LABEL@ or type a web address..." autofocus autocomplete="off" />
       <span class="engine-pill">@ENGINE_LABEL@</span>
-      <button type="submit" class="search-btn">Cari</button>
+      <button type="submit" class="search-btn">Search</button>
     </form>
 
     <div class="tiles-container">
@@ -233,15 +216,9 @@
         <div class="tile-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="@ACCENT@" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         </div>
-        <span class="tile-name">Pengaturan</span>
+        <span class="tile-name">Settings</span>
       </a>
     </div>
-  </div>
-
-  <div class="footer-bar">
-    <a class="footer-pill" href="attis-set://open_settings">Pengaturan Browser</a>
-    <a class="footer-pill" href="attis-set://smart_memory">Optimalkan RAM</a>
-    <a class="footer-pill" href="attis-set://open_downloads">Folder Unduhan</a>
   </div>
 
   <script>
@@ -275,7 +252,7 @@
         window.location.href = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(raw.slice(4).trim());
       } else if (raw.startsWith('!w ')) {
         e.preventDefault();
-        window.location.href = 'https://id.wikipedia.org/w/index.php?search=' + encodeURIComponent(raw.slice(3).trim());
+        window.location.href = 'https://en.wikipedia.org/w/index.php?search=' + encodeURIComponent(raw.slice(3).trim());
       } else if ((raw.startsWith('http://') || raw.startsWith('https://')) || (raw.indexOf('.') !== -1 && raw.indexOf(' ') === -1)) {
         e.preventDefault();
         window.location.href = raw.indexOf('://') !== -1 ? raw : 'https://' + raw;

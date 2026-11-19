@@ -28,6 +28,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   The start page now also follows the theme's background, surface, and
   border colors instead of hardcoded dark values. The settings page lost
   its emoji labels, lift-on-hover effects, and marketing footer copy.
+- Translated the whole browser UI to English (start page, settings page,
+  menus, dialogs, toasts, and the filter-list status) and removed the
+  start-page footer links, so the start page shows only the clock, the
+  search box, and the shortcut tiles.
   Other presets are unchanged.
 - The Rust engine and the C++ bridge now share a single configuration
   directory on every platform: the Rust side passes its resolved

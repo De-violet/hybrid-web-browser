@@ -84,10 +84,10 @@ fn test_resolve_sources_filters_unknown_and_insecure() {
 
 #[test]
 fn test_format_age_and_staleness() {
-    assert_eq!(format_age(1000, 1030), "baru saja");
-    assert_eq!(format_age(1000, 1000 + 5 * 60), "5 menit lalu");
-    assert_eq!(format_age(1000, 1000 + 3 * 3600), "3 jam lalu");
-    assert_eq!(format_age(1000, 1000 + 2 * 86400), "2 hari lalu");
+    assert_eq!(format_age(1000, 1030), "just now");
+    assert_eq!(format_age(1000, 1000 + 5 * 60), "5 minutes ago");
+    assert_eq!(format_age(1000, 1000 + 3 * 3600), "3 hours ago");
+    assert_eq!(format_age(1000, 1000 + 2 * 86400), "2 days ago");
 
     let dir = unique_temp_dir("stale");
     let missing = dir.join("tidak-ada.txt");

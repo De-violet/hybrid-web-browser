@@ -103,7 +103,7 @@ fn test_settings_extras_from_dir() {
     assert!(defaults.restore_session);
     assert!(defaults.suspend_enabled);
     assert_eq!(defaults.suspend_after_seconds, 120);
-    assert!(defaults.filter_status.contains("Belum"));
+    assert!(defaults.filter_status.contains("Never"));
 
     std::fs::write(
         dir.join("config.json"),

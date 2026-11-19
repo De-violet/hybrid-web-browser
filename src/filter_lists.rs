@@ -287,43 +287,42 @@ fn write_file_atomic(path: &Path, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Format umur dalam bahasa yang ramah dibaca, mis. "5 menit lalu".
+/// Format an age in human-friendly language, e.g. "5 minutes ago".
 pub fn format_age(updated_at: u64, now: u64) -> String {
     let age = now.saturating_sub(updated_at);
     if age < 60 {
-        "baru saja".to_string()
+        "just now".to_string()
     } else if age < 3600 {
-        format!("{} menit lalu", age / 60)
+        format!("{} minutes ago", age / 60)
     } else if age < 86400 {
-        format!("{} jam lalu", age / 3600)
+        format!("{} hours ago", age / 3600)
     } else {
-        format!("{} hari lalu", age / 86400)
+        format!("{} days ago", age / 86400)
     }
 }
 
-/// Ringkasan status untuk CLI dan halaman Pengaturan.
+/// Status summary for the CLI and the Settings page.
 pub fn status_summary(config_dir: &Path) -> String {
     match read_status(config_dir) {
         Some(status) if !status.lists.is_empty() => {
             let when = if status.updated_at > 0 {
                 format_age(status.updated_at, now_unix())
             } else {
-                "tidak diketahui".to_string()
+                "unknown".to_string()
             };
             let failed = status.lists.iter().filter(|l| l.error.is_some()).count();
             let mut out = format!(
-                "{} daftar aktif, {} rule, diperbarui {}",
+                "{} lists active, {} rules, updated {}",
                 status.lists.len(),
                 status.total_rules,
                 when
             );
             if failed > 0 {
-                out.push_str(&format!(" ({failed} gagal diperbarui, cache lama dipakai)"));
+                out.push_str(&format!(" ({failed} failed to update, using cached lists)"));
             }
             out
         }
-        _ => "Belum pernah diperbarui — klik Perbarui Filter atau jalankan --update-filters"
-            .to_string(),
+        _ => "Never updated — click Update Filter Lists or run --update-filters".to_string(),
     }
 }
 

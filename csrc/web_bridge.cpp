@@ -539,8 +539,8 @@ static void update_url_bar_for_current_tab(BrowserContext *ctx) {
         if (currentUrl == "attis:home") {
             ctx->urlBar->setText("");
             ctx->urlBar->setPlaceholderText(ctx->useGoogleSearch
-                ? "Cari di Google atau ketik alamat URL... (Ctrl+L)"
-                : "Cari di DuckDuckGo atau ketik alamat URL... (Ctrl+L)");
+                ? "Search Google or type a URL... (Ctrl+L)"
+                : "Search DuckDuckGo or type a URL... (Ctrl+L)");
             update_bookmark_button(ctx, false);
         } else if (currentUrl == "attis:settings") {
             ctx->urlBar->setText("attis:settings");
@@ -610,7 +610,7 @@ static void run_smart_memory_cleanup(BrowserContext *ctx) {
     }
 
     if (suspendedCount > 0) {
-        show_status_toast(ctx, QString("Smart Memory: %1 tab disuspensi untuk hemat RAM").arg(suspendedCount), 2500);
+        show_status_toast(ctx, QString("Smart Memory: suspended %1 tab(s) to save RAM").arg(suspendedCount), 2500);
     }
 }
 
@@ -656,15 +656,15 @@ static void update_security_indicator(BrowserContext *ctx, const QString &url) {
     if (url.startsWith("https://")) {
         px.loadFromData(reinterpret_cast<const uchar*>(LOCK_HTTPS_SVG), static_cast<uint>(strlen(LOCK_HTTPS_SVG)), "SVG");
         ctx->securityAction->setIcon(QIcon(px));
-        ctx->securityAction->setToolTip("Koneksi Aman (HTTPS Terenkripsi)");
+        ctx->securityAction->setToolTip("Secure Connection (Encrypted HTTPS)");
     } else if (url.startsWith("http://")) {
         px.loadFromData(reinterpret_cast<const uchar*>(UNLOCK_HTTP_SVG), static_cast<uint>(strlen(UNLOCK_HTTP_SVG)), "SVG");
         ctx->securityAction->setIcon(QIcon(px));
-        ctx->securityAction->setToolTip("Koneksi Tidak Terenkripsi (HTTP)");
+        ctx->securityAction->setToolTip("Unencrypted Connection (HTTP)");
     } else {
         px.loadFromData(reinterpret_cast<const uchar*>(INTERNAL_PAGE_SVG), static_cast<uint>(strlen(INTERNAL_PAGE_SVG)), "SVG");
         ctx->securityAction->setIcon(QIcon(px));
-        ctx->securityAction->setToolTip("Halaman Internal Attis");
+        ctx->securityAction->setToolTip("Attis Internal Page");
     }
 }
 
@@ -811,7 +811,7 @@ static void update_bookmark_button(BrowserContext *ctx, bool isBookmarked) {
     const char *svg = isBookmarked ? STAR_FILLED_SVG : STAR_EMPTY_SVG;
     px.loadFromData(reinterpret_cast<const uchar*>(svg), static_cast<uint>(strlen(svg)), "SVG");
     ctx->bookmarkAction->setIcon(QIcon(px));
-    ctx->bookmarkAction->setToolTip(isBookmarked ? "Hapus dari Bookmark (Ctrl+D)" : "Tambahkan ke Bookmark (Ctrl+D)");
+    ctx->bookmarkAction->setToolTip(isBookmarked ? "Remove from Bookmarks (Ctrl+D)" : "Add to Bookmarks (Ctrl+D)");
 }
 
 static void toggle_bookmark_current_page(BrowserContext *ctx) {
@@ -862,13 +862,13 @@ static void toggle_bookmark_current_page(BrowserContext *ctx) {
 static void show_bookmarks_dialog(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
     QDialog dlg(ctx->window);
-    dlg.setWindowTitle("Daftar Bookmark");
+    dlg.setWindowTitle("Bookmarks");
     dlg.resize(520, 380);
     dlg.setStyleSheet(generate_dialog_stylesheet(ctx->bgColor, ctx->fgColor, ctx->accentColor));
 
     auto *layout = new QVBoxLayout(&dlg);
     auto *searchBox = new QLineEdit(&dlg);
-    searchBox->setPlaceholderText("Cari judul atau URL bookmark...");
+    searchBox->setPlaceholderText("Search bookmark titles or URLs...");
     layout->addWidget(searchBox);
 
     auto *listWidget = new QListWidget(&dlg);
@@ -898,10 +898,10 @@ static void show_bookmarks_dialog(BrowserContext *ctx) {
     });
 
     auto *btnBox = new QHBoxLayout();
-    auto *openBtn = new QPushButton("Buka", &dlg);
-    auto *newTabBtn = new QPushButton("Buka di Tab Baru", &dlg);
-    auto *delBtn = new QPushButton("Hapus", &dlg);
-    auto *closeBtn = new QPushButton("Tutup", &dlg);
+    auto *openBtn = new QPushButton("Open", &dlg);
+    auto *newTabBtn = new QPushButton("Open in New Tab", &dlg);
+    auto *delBtn = new QPushButton("Delete", &dlg);
+    auto *closeBtn = new QPushButton("Close", &dlg);
     btnBox->addWidget(openBtn);
     btnBox->addWidget(newTabBtn);
     btnBox->addWidget(delBtn);
@@ -959,13 +959,13 @@ static void show_bookmarks_dialog(BrowserContext *ctx) {
 static void show_history_dialog(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
     QDialog dlg(ctx->window);
-    dlg.setWindowTitle("Riwayat Penjelajahan");
+    dlg.setWindowTitle("Browsing History");
     dlg.resize(560, 420);
     dlg.setStyleSheet(generate_dialog_stylesheet(ctx->bgColor, ctx->fgColor, ctx->accentColor));
 
     auto *layout = new QVBoxLayout(&dlg);
     auto *searchBox = new QLineEdit(&dlg);
-    searchBox->setPlaceholderText("Cari di riwayat penjelajahan...");
+    searchBox->setPlaceholderText("Search browsing history...");
     layout->addWidget(searchBox);
 
     auto *listWidget = new QListWidget(&dlg);
@@ -1001,10 +1001,10 @@ static void show_history_dialog(BrowserContext *ctx) {
     });
 
     auto *btnBox = new QHBoxLayout();
-    auto *openBtn = new QPushButton("Buka", &dlg);
-    auto *newTabBtn = new QPushButton("Buka di Tab Baru", &dlg);
-    auto *clearBtn = new QPushButton("Hapus Semua", &dlg);
-    auto *closeBtn = new QPushButton("Tutup", &dlg);
+    auto *openBtn = new QPushButton("Open", &dlg);
+    auto *newTabBtn = new QPushButton("Open in New Tab", &dlg);
+    auto *clearBtn = new QPushButton("Clear All", &dlg);
+    auto *closeBtn = new QPushButton("Close", &dlg);
     btnBox->addWidget(openBtn);
     btnBox->addWidget(newTabBtn);
     btnBox->addWidget(clearBtn);
@@ -1035,7 +1035,7 @@ static void show_history_dialog(BrowserContext *ctx) {
     QObject::connect(clearBtn, &QPushButton::clicked, [&]() {
         listWidget->clear();
         rust_clear_history();
-        show_status_toast(ctx, "Riwayat penjelajahan dibersihkan", 2000);
+        show_status_toast(ctx, "Browsing history cleared", 2000);
     });
 
     QObject::connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
@@ -1091,7 +1091,7 @@ static void open_downloads_folder(BrowserContext *ctx) {
 static void show_downloads_dialog(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
     QDialog dlg(ctx->window);
-    dlg.setWindowTitle(" Pengelola Unduhan");
+    dlg.setWindowTitle(" Download Manager");
     dlg.resize(520, 340);
     dlg.setStyleSheet(generate_dialog_stylesheet(ctx->bgColor, ctx->fgColor, ctx->accentColor));
 
@@ -1099,7 +1099,7 @@ static void show_downloads_dialog(BrowserContext *ctx) {
     auto *listWidget = new QListWidget(&dlg);
 
     if (ctx->downloads.empty()) {
-        listWidget->addItem("Belum ada unduhan pada sesi ini.");
+        listWidget->addItem("No downloads in this session yet.");
     } else {
         for (auto it = ctx->downloads.rbegin(); it != ctx->downloads.rend(); ++it) {
             QString kb = it->totalBytes > 0
@@ -1111,8 +1111,8 @@ static void show_downloads_dialog(BrowserContext *ctx) {
     layout->addWidget(listWidget);
 
     auto *btnBox = new QHBoxLayout();
-    auto *folderBtn = new QPushButton("Buka Folder Unduhan", &dlg);
-    auto *closeBtn = new QPushButton("Tutup", &dlg);
+    auto *folderBtn = new QPushButton("Open Downloads Folder", &dlg);
+    auto *closeBtn = new QPushButton("Close", &dlg);
     btnBox->addWidget(folderBtn);
     btnBox->addStretch();
     btnBox->addWidget(closeBtn);
@@ -1404,18 +1404,18 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
     } else if (action == "homepage") {
         QString hp = q.queryItemValue("val", QUrl::FullyDecoded).trimmed();
         save_browser_config(ctx, hp);
-        show_status_toast(ctx, "Halaman beranda disimpan", 2000);
+        show_status_toast(ctx, "Home page saved", 2000);
     } else if (action == "open_downloads") {
         open_downloads_folder(ctx);
     } else if (action == "clear_history") {
         rust_clear_history();
-        show_status_toast(ctx, "Riwayat berhasil dihapus", 2000);
+        show_status_toast(ctx, "History cleared", 2000);
     } else if (action == "clear_cache") {
         QWebEngineProfile::defaultProfile()->clearHttpCache();
-        show_status_toast(ctx, "HTTP Cache berhasil dibersihkan", 2000);
+        show_status_toast(ctx, "HTTP cache cleared", 2000);
     } else if (action == "filter_update") {
         rust_update_filters_async();
-        show_status_toast(ctx, "Memperbarui daftar filter di latar belakang...", 2500);
+        show_status_toast(ctx, "Updating filter lists in the background...", 2500);
     } else if (action == "filter_auto") {
         ctx->filterAutoUpdate = (q.queryItemValue("val") == "1");
         save_browser_config(ctx);
@@ -1449,7 +1449,7 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         QString csv = q.queryItemValue("val", QUrl::FullyDecoded).trimmed();
         save_allowlist_config(ctx, csv);
         rust_set_allowlist(csv.toUtf8().constData());
-        show_status_toast(ctx, "Allowlist adblock disimpan", 2000);
+        show_status_toast(ctx, "Adblock allowlist saved", 2000);
     } else if (action == "smart_memory") {
         run_smart_memory_cleanup(ctx);
     }
@@ -1517,13 +1517,13 @@ static void show_settings_dialog(BrowserContext *ctx) {
 
 static void restore_closed_tab(BrowserContext *ctx) {
     if (!ctx || ctx->closedTabs.empty()) {
-        show_status_toast(ctx, "Tidak ada tab tertutup untuk dipulihkan", 1800);
+        show_status_toast(ctx, "No closed tab to restore", 1800);
         return;
     }
     ClosedTabEntry last = ctx->closedTabs.back();
     ctx->closedTabs.pop_back();
     browser_add_tab(ctx, last.url.toUtf8().constData());
-    show_status_toast(ctx, QString("Tab dipulihkan: %1").arg(last.title), 2000);
+    show_status_toast(ctx, QString("Tab restored: %1").arg(last.title), 2000);
 }
 
 static void position_status_overlay(BrowserContext *ctx); // defined below, before browser_create
@@ -1558,13 +1558,13 @@ static void setup_download_handler(BrowserContext *ctx, QWebEngineProfile *profi
 
         DownloadItemMeta meta;
         meta.fileName = download->downloadFileName();
-        meta.stateText = "Mengunduh...";
+        meta.stateText = "Downloading...";
         meta.receivedBytes = 0;
         meta.totalBytes = download->totalBytes();
         ctx->downloads.push_back(meta);
         size_t dlIdx = ctx->downloads.size() - 1;
 
-        show_status_toast(ctx, QString("⬇️ Mengunduh: %1").arg(meta.fileName), 3000);
+        show_status_toast(ctx, QString("⬇️ Downloading: %1").arg(meta.fileName), 3000);
 
         QObject::connect(download, &QWebEngineDownloadRequest::receivedBytesChanged, [ctx, download, dlIdx]() {
             if (dlIdx < ctx->downloads.size()) {
@@ -1576,13 +1576,13 @@ static void setup_download_handler(BrowserContext *ctx, QWebEngineProfile *profi
         QObject::connect(download, &QWebEngineDownloadRequest::stateChanged, [ctx, download, dlIdx](QWebEngineDownloadRequest::DownloadState state) {
             if (dlIdx >= ctx->downloads.size()) return;
             if (state == QWebEngineDownloadRequest::DownloadCompleted) {
-                ctx->downloads[dlIdx].stateText = "Selesai";
-                show_status_toast(ctx, QString("✅ Unduhan selesai: %1").arg(ctx->downloads[dlIdx].fileName), 4000);
+                ctx->downloads[dlIdx].stateText = "Done";
+                show_status_toast(ctx, QString("✅ Download finished: %1").arg(ctx->downloads[dlIdx].fileName), 4000);
             } else if (state == QWebEngineDownloadRequest::DownloadInterrupted) {
-                ctx->downloads[dlIdx].stateText = "Gagal";
-                show_status_toast(ctx, QString("❌ Unduhan gagal: %1").arg(ctx->downloads[dlIdx].fileName), 4000);
+                ctx->downloads[dlIdx].stateText = "Failed";
+                show_status_toast(ctx, QString("❌ Download failed: %1").arg(ctx->downloads[dlIdx].fileName), 4000);
             } else if (state == QWebEngineDownloadRequest::DownloadCancelled) {
-                ctx->downloads[dlIdx].stateText = "Dibatalkan";
+                ctx->downloads[dlIdx].stateText = "Cancelled";
             }
         });
     });
@@ -1789,7 +1789,7 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     ctx->newTabBtn = new QPushButton("+", ctx->tabRowWidget);
     ctx->newTabBtn->setObjectName("newTabBtn");
     ctx->newTabBtn->setFixedSize(32, 32);
-    ctx->newTabBtn->setToolTip("Tab Baru (Ctrl+T)");
+    ctx->newTabBtn->setToolTip("New Tab (Ctrl+T)");
     ctx->newTabBtn->setCursor(Qt::PointingHandCursor);
 
     tabRowLayout->addWidget(ctx->tabBar);
@@ -1821,7 +1821,7 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     ctx->winCloseBtn = new QPushButton("✕", winCtrlWidget);
     ctx->winCloseBtn->setObjectName("winCloseBtn");
     ctx->winCloseBtn->setFixedSize(32, 28);
-    ctx->winCloseBtn->setToolTip("Tutup");
+    ctx->winCloseBtn->setToolTip("Close");
 
     winCtrlLayout->addWidget(ctx->winMinBtn);
     winCtrlLayout->addWidget(ctx->winMaxBtn);
@@ -1847,12 +1847,12 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
         if (tabIdx < 0 || tabIdx >= static_cast<int>(ctx->tabs.size())) return;
 
         QMenu tabMenu(ctx->window);
-        auto *actReload = tabMenu.addAction("Muat Ulang Tab");
-        auto *actDuplicate = tabMenu.addAction("Duplikat Tab");
-        auto *actSuspend = tabMenu.addAction("Suspensi Tab (Hemat RAM)");
+        auto *actReload = tabMenu.addAction("Reload Tab");
+        auto *actDuplicate = tabMenu.addAction("Duplicate Tab");
+        auto *actSuspend = tabMenu.addAction("Suspend Tab (Save RAM)");
         tabMenu.addSeparator();
-        auto *actCloseOthers = tabMenu.addAction("Tutup Tab Lainnya");
-        auto *actClose = tabMenu.addAction("Tutup Tab");
+        auto *actCloseOthers = tabMenu.addAction("Close Other Tabs");
+        auto *actClose = tabMenu.addAction("Close Tab");
 
         QAction *chosen = tabMenu.exec(ctx->tabBar->mapToGlobal(pos));
         if (!chosen) return;
@@ -1889,22 +1889,22 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     ctx->backBtn = new QPushButton("←", ctx->navBar);
     ctx->backBtn->setObjectName("iconBtn");
     ctx->backBtn->setFixedSize(34, 34);
-    ctx->backBtn->setToolTip("Kembali (Alt+Left)");
+    ctx->backBtn->setToolTip("Back (Alt+Left)");
 
     ctx->forwardBtn = new QPushButton("→", ctx->navBar);
     ctx->forwardBtn->setObjectName("iconBtn");
     ctx->forwardBtn->setFixedSize(34, 34);
-    ctx->forwardBtn->setToolTip("Maju (Alt+Right)");
+    ctx->forwardBtn->setToolTip("Forward (Alt+Right)");
 
     ctx->reloadBtn = new QPushButton("↻", ctx->navBar);
     ctx->reloadBtn->setObjectName("iconBtn");
     ctx->reloadBtn->setFixedSize(34, 34);
-    ctx->reloadBtn->setToolTip("Muat Ulang (Ctrl+R / F5)");
+    ctx->reloadBtn->setToolTip("Reload (Ctrl+R / F5)");
 
     ctx->urlBar = new QLineEdit(ctx->navBar);
     ctx->urlBar->setObjectName("urlBar");
     ctx->urlBar->setMinimumHeight(38);
-    ctx->urlBar->setPlaceholderText("Cari di Google atau ketik alamat URL... (Ctrl+L)");
+    ctx->urlBar->setPlaceholderText("Search Google or type a URL... (Ctrl+L)");
 
     // Leading Actions inside URL Bar: Engine Toggle + HTTPS Security Lock
     ctx->engineAction = ctx->urlBar->addAction(QIcon(), QLineEdit::LeadingPosition);
@@ -1939,32 +1939,32 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     ctx->menuBtn = new QPushButton("⋮", ctx->navBar);
     ctx->menuBtn->setObjectName("iconBtn");
     ctx->menuBtn->setFixedSize(34, 34);
-    ctx->menuBtn->setToolTip("Menu & Pengaturan (Ctrl+,)");
+    ctx->menuBtn->setToolTip("Menu & Settings (Ctrl+,)");
 
     auto *menu = new QMenu(ctx->menuBtn);
-    auto *actionNewTab = menu->addAction("Tab Baru");
+    auto *actionNewTab = menu->addAction("New Tab");
     actionNewTab->setShortcut(QKeySequence("Ctrl+T"));
 
-    auto *actionNewPrivate = menu->addAction("Tab Penyamaran Baru (Private)");
+    auto *actionNewPrivate = menu->addAction("New Private Tab (Incognito)");
     actionNewPrivate->setShortcut(QKeySequence("Ctrl+Shift+N"));
 
-    auto *actionRestoreTab = menu->addAction("Pulihkan Tab Tertutup");
+    auto *actionRestoreTab = menu->addAction("Restore Closed Tab");
     actionRestoreTab->setShortcut(QKeySequence("Ctrl+Shift+T"));
 
     menu->addSeparator();
 
-    auto *actionBookmarks = menu->addAction("Daftar Bookmark");
+    auto *actionBookmarks = menu->addAction("Bookmarks");
     actionBookmarks->setShortcut(QKeySequence("Ctrl+B"));
 
-    auto *actionHistory = menu->addAction("Riwayat Penjelajahan");
+    auto *actionHistory = menu->addAction("Browsing History");
     actionHistory->setShortcut(QKeySequence("Ctrl+H"));
 
-    auto *actionDownloads = menu->addAction("Pengelola Unduhan");
+    auto *actionDownloads = menu->addAction("Download Manager");
     actionDownloads->setShortcut(QKeySequence("Ctrl+J"));
 
     menu->addSeparator();
 
-    auto *actionFind = menu->addAction("Cari di Halaman...");
+    auto *actionFind = menu->addAction("Find in Page...");
     actionFind->setShortcut(QKeySequence("Ctrl+F"));
 
     // Horizontal Zoom Row Action
@@ -1987,7 +1987,7 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     auto *zoomFullBtn = new QPushButton("⛶", zoomWidget);
     zoomFullBtn->setObjectName("iconBtn");
     zoomFullBtn->setFixedSize(28, 28);
-    zoomFullBtn->setToolTip("Layar Penuh (F11)");
+    zoomFullBtn->setToolTip("Full Screen (F11)");
 
     zoomLayout->addWidget(zoomLabel);
     zoomLayout->addStretch();
@@ -2000,15 +2000,15 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
 
     menu->addSeparator();
 
-    auto *moreMenu = menu->addMenu("Alat Lainnya");
+    auto *moreMenu = menu->addMenu("More Tools");
     auto *actionEngine = moreMenu->addAction("Ganti Mesin Pencari (Google / DDG)");
-    auto *actionTabHide = moreMenu->addAction("Sembunyikan / Tampilkan Tab Bar");
-    auto *actionCleanMem = moreMenu->addAction("Optimalkan Memori Tab Tidak Aktif");
-    auto *actionFullscreen = moreMenu->addAction("Layar Penuh (F11)");
+    auto *actionTabHide = moreMenu->addAction("Hide / Show Tab Bar");
+    auto *actionCleanMem = moreMenu->addAction("Optimize Memory of Inactive Tabs");
+    auto *actionFullscreen = moreMenu->addAction("Full Screen (F11)");
 
     menu->addSeparator();
 
-    auto *actionSettings = menu->addAction("Pengaturan Browser");
+    auto *actionSettings = menu->addAction("Browser Settings");
     actionSettings->setShortcut(QKeySequence("Ctrl+,"));
 
     QObject::connect(actionNewTab, &QAction::triggered, [ctx]() { browser_add_tab(ctx, ""); });
@@ -2086,7 +2086,7 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     findLayout->setContentsMargins(14, 6, 14, 6);
     findLayout->setSpacing(8);
 
-    auto *findTitle = new QLabel("Cari:", ctx->findBar);
+    auto *findTitle = new QLabel("Find:", ctx->findBar);
     ctx->findInput = new QLineEdit(ctx->findBar);
     ctx->findInput->setObjectName("findInput");
     ctx->findInput->setPlaceholderText("Ketik teks yang dicari di halaman...");
@@ -2106,7 +2106,7 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     auto *findCloseBtn = new QPushButton("✕", ctx->findBar);
     findCloseBtn->setObjectName("iconBtn");
     findCloseBtn->setFixedSize(28, 28);
-    findCloseBtn->setToolTip("Tutup (Esc)");
+    findCloseBtn->setToolTip("Close (Esc)");
 
     findLayout->addWidget(findTitle);
     findLayout->addWidget(ctx->findInput);
@@ -2526,7 +2526,7 @@ static int create_tab_internal(BrowserContext *ctx, const char* raw_url, bool is
     }
 
     if (is_private) {
-        show_status_toast(ctx, "🕶️ Mode Penyamaran: Riwayat & cookie tidak disimpan", 2800);
+        show_status_toast(ctx, "🕶️ Incognito Mode: history & cookies are not saved", 2800);
     }
 
     return index;
@@ -2666,11 +2666,11 @@ void browser_navigate(BrowserHandle handle, const char* raw_url) {
         update_security_indicator(ctx, "attis:settings");
         if (idx >= 0 && idx < static_cast<int>(ctx->tabs.size())) {
             ctx->tabs[idx].savedUrl = "attis:settings";
-            ctx->tabs[idx].savedTitle = "Pengaturan";
+            ctx->tabs[idx].savedTitle = "Settings";
             ctx->tabs[idx].lastActive = QDateTime::currentSecsSinceEpoch();
             ctx->tabs[idx].isSuspended = false;
         }
-        ctx->tabBar->setTabText(idx, "⚙️ Pengaturan");
+        ctx->tabBar->setTabText(idx, "⚙️ Settings");
         return;
     }
 
@@ -2679,8 +2679,8 @@ void browser_navigate(BrowserHandle handle, const char* raw_url) {
         view->setHtml(generate_start_page_html(ctx), QUrl("attis:home"));
         ctx->urlBar->setText("");
         ctx->urlBar->setPlaceholderText(ctx->useGoogleSearch
-            ? "Cari di Google atau ketik alamat URL... (Ctrl+L)"
-            : "Cari di DuckDuckGo atau ketik alamat URL... (Ctrl+L)");
+            ? "Search Google or type a URL... (Ctrl+L)"
+            : "Search DuckDuckGo or type a URL... (Ctrl+L)");
         update_bookmark_button(ctx, false);
         update_security_indicator(ctx, "attis:home");
         if (idx >= 0 && idx < static_cast<int>(ctx->tabs.size())) {
