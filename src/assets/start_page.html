@@ -11,7 +11,7 @@
     height: 100vh;
     margin: 0;
     padding: 0;
-    background: transparent;
+    background: @BG@;
     color: @FG@;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
     display: flex;
@@ -21,22 +21,11 @@
     user-select: none;
     overflow: hidden;
   }
-  .ambient-glow {
-    position: fixed;
-    width: 540px;
-    height: 540px;
-    border-radius: 50%;
-    background: radial-gradient(circle, @ACCENT@ 0%, transparent 70%);
-    opacity: 0.08;
-    pointer-events: none;
-    top: -160px;
-    z-index: 0;
-  }
   .main-wrap {
     position: relative;
     z-index: 1;
     width: 100%;
-    max-width: 720px;
+    max-width: 640px;
     padding: 24px;
     display: flex;
     flex-direction: column;
@@ -46,63 +35,37 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: 30px;
+    margin-bottom: 28px;
     @CLOCK_DISP@
   }
   .clock {
-    font-size: 74px;
-    font-weight: 300;
-    color: @FG@;
-    letter-spacing: -2.5px;
-    line-height: 1;
-    text-shadow: 0 6px 28px rgba(0, 0, 0, 0.35);
-    font-variant-numeric: tabular-nums;
-  }
-  .greeting-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 10px;
-    font-size: 14px;
+    font-size: 28px;
     font-weight: 400;
     color: @FG@;
-    opacity: 0.72;
-    letter-spacing: 0.2px;
-  }
-  .dot-sep {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: @ACCENT@;
+    opacity: 0.6;
+    letter-spacing: 0;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
   form.search-box {
     width: 100%;
-    max-width: 620px;
+    max-width: 560px;
     display: flex;
     align-items: center;
-    background: rgba(24, 24, 37, 0.78);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 28px;
-    padding: 8px 14px 8px 18px;
-    box-shadow: 0 10px 36px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    background: @SURFACE@;
+    border: 1px solid @BORDER@;
+    border-radius: 8px;
+    padding: 8px 12px;
     @SEARCH_DISP@
-  }
-  form.search-box:hover {
-    border-color: rgba(255, 255, 255, 0.26);
-    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
   form.search-box:focus-within {
     border-color: @ACCENT@;
-    background: rgba(24, 24, 37, 0.94);
-    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.44), 0 0 0 1.5px @ACCENT@;
   }
   .search-icon {
     width: 18px;
     height: 18px;
     stroke: @FG@;
-    opacity: 0.75;
+    opacity: 0.6;
     flex-shrink: 0;
   }
   input {
@@ -110,24 +73,24 @@
     background: transparent;
     border: none;
     outline: none;
-    color: #F4F4F5;
+    color: @FG@;
     font-size: 15px;
     font-family: inherit;
-    padding: 7px 14px;
+    padding: 7px 12px;
   }
   input::placeholder {
-    color: rgba(244, 244, 245, 0.46);
-    opacity: 1;
+    color: @FG@;
+    opacity: 0.45;
   }
   .engine-pill {
     font-size: 11px;
     font-weight: 600;
     color: @FG@;
-    opacity: 0.65;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    padding: 4px 9px;
-    border-radius: 10px;
+    opacity: 0.55;
+    background: transparent;
+    border: 1px solid @BORDER@;
+    padding: 4px 8px;
+    border-radius: 6px;
     margin-right: 6px;
   }
   .search-btn {
@@ -137,37 +100,19 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    padding: 7px 16px;
-    border-radius: 18px;
-    transition: transform 0.15s, opacity 0.15s;
+    padding: 7px 14px;
+    border-radius: 6px;
   }
   .search-btn:hover {
-    opacity: 0.92;
-    transform: translateY(-1px);
-  }
-  .bang-hints {
-    margin-top: 10px;
-    font-size: 11.5px;
-    color: @FG@;
-    opacity: 0.48;
-    display: flex;
-    gap: 14px;
-    @SEARCH_DISP@
-  }
-  .bang-hints code {
-    color: @ACCENT@;
-    font-family: monospace;
-    background: rgba(255, 255, 255, 0.06);
-    padding: 1px 5px;
-    border-radius: 4px;
+    opacity: 0.9;
   }
   .tiles-container {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
+    gap: 10px;
     width: 100%;
     max-width: 560px;
-    margin-top: 32px;
+    margin-top: 28px;
     @TILES_DISP@
   }
   .tile {
@@ -179,30 +124,27 @@
     color: @FG@;
     font-size: 12.5px;
     font-weight: 500;
-    padding: 14px 8px;
-    border-radius: 16px;
-    background: rgba(24, 24, 37, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background 0.18s, border-color 0.18s;
+    padding: 12px 8px;
+    border-radius: 8px;
+    background: transparent;
+    border: 1px solid transparent;
   }
   .tile:hover {
-    transform: translateY(-4px);
-    background: rgba(255, 255, 255, 0.09);
-    border-color: @ACCENT@;
+    background: @SURFACE@;
+    border-color: @BORDER@;
   }
   .tile-icon {
     width: 48px;
     height: 48px;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+    border-radius: 8px;
+    background: @SURFACE@;
+    border: 1px solid @BORDER@;
     display: flex;
     align-items: center;
     justify-content: center;
   }
   .tile-name {
-    opacity: 0.88;
+    opacity: 0.8;
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
@@ -211,38 +153,27 @@
   }
   .footer-bar {
     position: fixed;
-    bottom: 18px;
+    bottom: 16px;
     display: flex;
-    gap: 12px;
+    gap: 20px;
     z-index: 1;
   }
   .footer-pill {
     text-decoration: none;
     color: @FG@;
-    opacity: 0.65;
+    opacity: 0.55;
     font-size: 12px;
-    padding: 6px 12px;
-    border-radius: 14px;
-    background: rgba(24, 24, 37, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    transition: opacity 0.15s, border-color 0.15s;
+    padding: 0;
   }
   .footer-pill:hover {
     opacity: 1;
-    border-color: @ACCENT@;
   }
 </style>
 </head>
 <body>
-  <div class="ambient-glow"></div>
   <div class="main-wrap">
     <div class="clock-container">
       <div class="clock" id="clock">--:--</div>
-      <div class="greeting-row">
-        <span id="greeting">Selamat datang</span>
-        <span class="dot-sep"></span>
-        <span id="dateStr">Memuat tanggal...</span>
-      </div>
     </div>
 
     <form class="search-box" id="searchForm" action="@SEARCH_ACTION@" method="GET">
@@ -254,14 +185,6 @@
       <span class="engine-pill">@ENGINE_LABEL@</span>
       <button type="submit" class="search-btn">Cari</button>
     </form>
-
-    <div class="bang-hints">
-      <span>Pintasan: <code>!g</code> Google</span>
-      <span><code>!d</code> DuckDuckGo</span>
-      <span><code>!gh</code> GitHub</span>
-      <span><code>!yt</code> YouTube</span>
-      <span><code>!w</code> Wikipedia</span>
-    </div>
 
     <div class="tiles-container">
       <a class="tile" href="https://www.google.com">
@@ -316,34 +239,18 @@
   </div>
 
   <div class="footer-bar">
-    <a class="footer-pill" href="attis-set://open_settings">⚙️ Pengaturan Browser</a>
-    <a class="footer-pill" href="attis-set://smart_memory">⚡ Optimalkan RAM</a>
-    <a class="footer-pill" href="attis-set://open_downloads">📂 Folder Unduhan</a>
+    <a class="footer-pill" href="attis-set://open_settings">Pengaturan Browser</a>
+    <a class="footer-pill" href="attis-set://smart_memory">Optimalkan RAM</a>
+    <a class="footer-pill" href="attis-set://open_downloads">Folder Unduhan</a>
   </div>
 
   <script>
     function updateTime() {
       var d = new Date();
-      var hr = d.getHours();
-      var h = ('0' + hr).slice(-2);
+      var h = ('0' + d.getHours()).slice(-2);
       var m = ('0' + d.getMinutes()).slice(-2);
       var el = document.getElementById('clock');
       if (el) el.textContent = h + ':' + m;
-
-      var greet = 'Selamat Malam';
-      if (hr >= 4 && hr < 11) greet = 'Selamat Pagi';
-      else if (hr >= 11 && hr < 15) greet = 'Selamat Siang';
-      else if (hr >= 15 && hr < 18) greet = 'Selamat Sore';
-
-      var gEl = document.getElementById('greeting');
-      if (gEl) gEl.textContent = greet;
-
-      var days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-      var months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-      var dEl = document.getElementById('dateStr');
-      if (dEl) {
-        dEl.textContent = days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
-      }
     }
     updateTime();
     setInterval(updateTime, 1000);

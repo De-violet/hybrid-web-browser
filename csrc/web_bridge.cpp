@@ -56,7 +56,7 @@
 #include <vector>
 
 extern "C" {
-    char* rust_get_start_page(const char* accent, const char* fg, bool is_google, bool show_clock, bool show_search, bool show_tiles);
+    char* rust_get_start_page(const char* accent, const char* fg, const char* bg, const char* surface, const char* border, bool is_google, bool show_clock, bool show_search, bool show_tiles);
     char* rust_get_settings_page(
         const char* theme, const char* bg, const char* surface, const char* fg, const char* accent, const char* border,
         float opacity, const char* density, const char* tab_pos, float zoom, bool is_google,
@@ -226,12 +226,12 @@ struct BrowserContext {
     bool enableAdblock = true;
     bool enableCosmeticFilter = true;
     QString currentTheme = "violet";
-    QString bgColor = "#16102a";
-    QString fgColor = "#ddd6fe";
+    QString bgColor = "#121214";
+    QString fgColor = "#e8e8ea";
     QString accentColor = "#8b5cf6";
-    QString surfaceColor = "#1e1738";
-    QString borderColor = "#3f2d6b";
-    float bgOpacity = 0.88f;
+    QString surfaceColor = "#1c1c1f";
+    QString borderColor = "#2e2e33";
+    float bgOpacity = 1.0f;
     QString uiDensity = "comfortable";
     QString tabPosition = "top";
     bool showHomeSearch = true;
@@ -382,7 +382,7 @@ void browser_set_theme(BrowserHandle handle, const char* theme_name, const char*
         QString t = QString::fromUtf8(theme_name).toLower();
         ctx->currentTheme = t;
         if (t == "violet") {
-            ctx->bgColor = "#16102a"; ctx->surfaceColor = "#1e1738"; ctx->fgColor = "#ddd6fe"; ctx->accentColor = "#8b5cf6"; ctx->borderColor = "#3f2d6b"; ctx->bgOpacity = 0.88f;
+            ctx->bgColor = "#121214"; ctx->surfaceColor = "#1c1c1f"; ctx->fgColor = "#e8e8ea"; ctx->accentColor = "#8b5cf6"; ctx->borderColor = "#2e2e33"; ctx->bgOpacity = 1.0f;
         } else if (t == "dark_glass" || t == "dark") {
             ctx->bgColor = "#11111b"; ctx->surfaceColor = "#181825"; ctx->fgColor = "#cdd6f4"; ctx->accentColor = "#89b4fa"; ctx->borderColor = "#313244"; ctx->bgOpacity = 0.88f;
         } else if (t == "catppuccin") {
@@ -691,6 +691,9 @@ static QString generate_start_page_html(BrowserContext *ctx) {
     char* raw = rust_get_start_page(
         ctx->accentColor.toUtf8().constData(),
         ctx->fgColor.toUtf8().constData(),
+        ctx->bgColor.toUtf8().constData(),
+        ctx->surfaceColor.toUtf8().constData(),
+        ctx->borderColor.toUtf8().constData(),
         ctx->useGoogleSearch,
         ctx->showHomeClock,
         ctx->showHomeSearch,
@@ -703,8 +706,8 @@ static QString generate_start_page_html(BrowserContext *ctx) {
 }
 
 static QString generate_dialog_stylesheet(const QString &bg, const QString &fg, const QString &accent) {
-    QString safeBg = sanitize_qss_color(bg, "#16102a");
-    QString safeFg = sanitize_qss_color(fg, "#ddd6fe");
+    QString safeBg = sanitize_qss_color(bg, "#121214");
+    QString safeFg = sanitize_qss_color(fg, "#e8e8ea");
     QString safeAccent = sanitize_qss_color(accent, "#8b5cf6");
     QColor bgCol(safeBg);
     bool isLight = bgCol.isValid() && bgCol.lightnessF() > 0.5;
@@ -1339,11 +1342,11 @@ static void handle_settings_action(BrowserContext *ctx, const QUrl &url) {
         save_browser_config(ctx);
     } else if (action == "reset_defaults" || action == "reset") {
         ctx->currentTheme = "violet";
-        ctx->bgColor = "#16102a";
-        ctx->surfaceColor = "#1e1738";
-        ctx->fgColor = "#ddd6fe";
+        ctx->bgColor = "#121214";
+        ctx->surfaceColor = "#1c1c1f";
+        ctx->fgColor = "#e8e8ea";
         ctx->accentColor = "#8b5cf6";
-        ctx->borderColor = "#3f2d6b";
+        ctx->borderColor = "#2e2e33";
         ctx->bgOpacity = 0.88f;
         ctx->uiDensity = "comfortable";
         ctx->tabPosition = "top";

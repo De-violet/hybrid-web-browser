@@ -60,7 +60,7 @@ pub fn generate_qss(
 
     // Parse hex bg to RGB + lightness detection. Input tidak valid
     // (mis. string non-ASCII) memakai warna default, tidak pernah panic.
-    let (r, g, b) = parse_hex_rgb(bg).unwrap_or((22, 16, 42));
+    let (r, g, b) = parse_hex_rgb(bg).unwrap_or((18, 18, 20));
     let luminance = (0.299 * (r as f32) + 0.587 * (g as f32) + 0.114 * (b as f32)) as u32;
     let is_light = luminance > 140;
 
@@ -91,10 +91,10 @@ pub fn generate_qss(
     };
 
     let bg_rgba = format!("rgba({}, {}, {}, {:.2})", r, g, b, op);
-    let surface_col = sanitize_color_token(surface, "#1e1738");
-    let fg_col = sanitize_color_token(fg, "#ddd6fe");
+    let surface_col = sanitize_color_token(surface, "#1c1c1f");
+    let fg_col = sanitize_color_token(fg, "#e8e8ea");
     let accent_col = sanitize_color_token(accent, "#8b5cf6");
-    let border_col = sanitize_color_token(border, "#3f2d6b");
+    let border_col = sanitize_color_token(border, "#2e2e33");
 
     let base_qss = format!(
         r#"
@@ -106,8 +106,8 @@ QTabBar::tab {{
     background-color: transparent;
     color: {fg_col};
     border: 1px solid transparent;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
     padding: {tab_padding};
     margin-right: 4px;
     min-width: {tab_min_w};
@@ -144,7 +144,7 @@ QPushButton#newTabBtn {{
     background: transparent;
     color: {fg_col};
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     font-size: 18px;
     font-weight: 500;
 }}
@@ -155,7 +155,7 @@ QPushButton#winMinBtn, QPushButton#winMaxBtn, QPushButton#winCloseBtn {{
     background: transparent;
     color: {fg_col};
     border: none;
-    border-radius: 6px;
+    border-radius: 4px;
     font-size: 13px;
     font-weight: 600;
 }}
@@ -178,7 +178,7 @@ QPushButton#iconBtn, QPushButton#engineBtn {{
     background-color: transparent;
     color: {fg_col};
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 4px;
     font-size: 15px;
 }}
@@ -199,7 +199,7 @@ QLineEdit#urlBar, QLineEdit#findInput {{
     background-color: {url_bg};
     color: {fg_col};
     border: 1px solid {border_col};
-    border-radius: 14px;
+    border-radius: 8px;
     padding: {url_padding};
     font-size: {url_font_size};
     selection-background-color: {accent_col};
@@ -209,14 +209,14 @@ QLineEdit#urlBar:hover, QLineEdit#findInput:hover {{
     background-color: {url_hover_bg};
 }}
 QLineEdit#urlBar:focus, QLineEdit#findInput:focus {{
-    border: 1.5px solid {accent_col};
+    border: 1px solid {accent_col};
     background-color: {url_focus_bg};
 }}
 QLabel#adblockBadge {{
     background-color: rgba(166, 227, 161, 0.14);
     color: #a6e3a1;
     border: 1px solid rgba(166, 227, 161, 0.30);
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 4px 11px;
     font-size: 11px;
     font-weight: 600;
@@ -225,7 +225,7 @@ QLabel#privateBadge {{
     background-color: rgba(203, 166, 247, 0.16);
     color: #cba6f7;
     border: 1px solid rgba(203, 166, 247, 0.35);
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 4px 10px;
     font-size: 11px;
     font-weight: 600;
@@ -243,7 +243,7 @@ QMenu {{
     background-color: {surface_col};
     color: {fg_col};
     border: 1px solid {border_col};
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 6px;
 }}
 QMenu::item {{
@@ -292,19 +292,19 @@ pub unsafe extern "C" fn rust_get_theme_qss(
     close_hover: *const c_char,
 ) -> *mut c_char {
     let bg_str = if bg.is_null() {
-        "#16102a"
+        "#121214"
     } else {
-        unsafe { CStr::from_ptr(bg).to_str().unwrap_or("#16102a") }
+        unsafe { CStr::from_ptr(bg).to_str().unwrap_or("#121214") }
     };
     let surface_str = if surface.is_null() {
-        "#1e1738"
+        "#1c1c1f"
     } else {
-        unsafe { CStr::from_ptr(surface).to_str().unwrap_or("#1e1738") }
+        unsafe { CStr::from_ptr(surface).to_str().unwrap_or("#1c1c1f") }
     };
     let fg_str = if fg.is_null() {
-        "#ddd6fe"
+        "#e8e8ea"
     } else {
-        unsafe { CStr::from_ptr(fg).to_str().unwrap_or("#ddd6fe") }
+        unsafe { CStr::from_ptr(fg).to_str().unwrap_or("#e8e8ea") }
     };
     let accent_str = if accent.is_null() {
         "#8b5cf6"
@@ -312,9 +312,9 @@ pub unsafe extern "C" fn rust_get_theme_qss(
         unsafe { CStr::from_ptr(accent).to_str().unwrap_or("#8b5cf6") }
     };
     let border_str = if border.is_null() {
-        "#3f2d6b"
+        "#2e2e33"
     } else {
-        unsafe { CStr::from_ptr(border).to_str().unwrap_or("#3f2d6b") }
+        unsafe { CStr::from_ptr(border).to_str().unwrap_or("#2e2e33") }
     };
     let density_str = if density.is_null() {
         "comfortable"

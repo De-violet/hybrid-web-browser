@@ -48,7 +48,7 @@
     align-items: center;
     gap: 12px;
     padding: 10px 14px;
-    border-radius: 10px;
+    border-radius: 8px;
     border: 1px solid transparent;
     background: transparent;
     color: @FG@;
@@ -107,7 +107,7 @@
   .card {
     background: @SURFACE@;
     border: 1px solid @BORDER@;
-    border-radius: 14px;
+    border-radius: 10px;
     padding: 20px 24px;
     margin-bottom: 20px;
     display: flex;
@@ -178,7 +178,7 @@
   input:checked + .slider:before {
     transform: translateX(20px);
   }
-  select, input[type="text"] {
+  select, input[type="text"], input[type="number"] {
     background: @BG@;
     border: 1px solid @BORDER@;
     color: @FG@;
@@ -210,11 +210,9 @@
   }
   .theme-card:hover {
     border-color: @ACCENT@;
-    transform: translateY(-2px);
   }
   .theme-card.selected {
     border-color: @ACCENT@;
-    box-shadow: 0 0 0 1px @ACCENT@;
   }
   .theme-preview {
     width: 100%;
@@ -237,7 +235,6 @@
   }
   .btn:hover {
     opacity: 0.92;
-    transform: translateY(-1px);
   }
   .btn-secondary {
     background: rgba(128, 128, 150, 0.16);
@@ -299,15 +296,12 @@
     border-radius: 10px;
     font-size: 13px;
     font-weight: 600;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     opacity: 0;
-    transform: translateY(10px);
-    transition: all 0.2s ease;
+    transition: opacity 0.2s ease;
     pointer-events: none;
   }
   .toast.show {
     opacity: 1;
-    transform: translateY(0);
   }
 </style>
 </head>
@@ -318,17 +312,15 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="@ACCENT@" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         Attis
       </div>
-      <button class="nav-btn active" onclick="switchTab('general', this)">⚙️ Umum</button>
-      <button class="nav-btn" onclick="switchTab('appearance', this)">🎨 Tampilan & Tema</button>
-      <button class="nav-btn" onclick="switchTab('search', this)">🔍 Pencarian</button>
-      <button class="nav-btn" onclick="switchTab('privacy', this)">🛡️ Privasi & AdBlock</button>
-      <button class="nav-btn" onclick="switchTab('shortcuts', this)">⌨️ Pintasan Keyboard</button>
-      <button class="nav-btn" onclick="switchTab('advanced', this)">🧪 Lanjutan & QSS</button>
+      <button class="nav-btn active" onclick="switchTab('general', this)">Umum</button>
+      <button class="nav-btn" onclick="switchTab('appearance', this)">Tampilan & Tema</button>
+      <button class="nav-btn" onclick="switchTab('search', this)">Pencarian</button>
+      <button class="nav-btn" onclick="switchTab('privacy', this)">Privasi & AdBlock</button>
+      <button class="nav-btn" onclick="switchTab('shortcuts', this)">Pintasan Keyboard</button>
+      <button class="nav-btn" onclick="switchTab('advanced', this)">Lanjutan & QSS</button>
 
       <div class="sidebar-footer">
-        <strong>Attis v0.2</strong><br>
-        Rust AdBlock Core + Qt6 WebEngine<br>
-        Smart Memory &amp; Privacy Guard
+        <strong>Attis v0.2</strong>
       </div>
     </div>
 
@@ -392,14 +384,14 @@
               <div class="setting-title">Folder Unduhan</div>
               <div class="setting-desc">Buka direktori penyimpanan file yang diunduh</div>
             </div>
-            <button class="btn btn-secondary" onclick="triggerAction('open_downloads', {})">📂 Buka Folder Unduhan</button>
+            <button class="btn btn-secondary" onclick="triggerAction('open_downloads', {})">Buka Folder Unduhan</button>
           </div>
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Smart Memory Cleanup</div>
               <div class="setting-desc">Suspensi tab latar belakang yang tidak aktif untuk menghemat RAM. Tab yang sedang memutar audio/video tidak pernah disuspensi.</div>
             </div>
-            <button class="btn btn-secondary" onclick="triggerAction('smart_memory', {})">⚡ Bersihkan Sekarang</button>
+            <button class="btn btn-secondary" onclick="triggerAction('smart_memory', {})">Bersihkan Sekarang</button>
           </div>
           <div class="setting-row">
             <div class="setting-info">
@@ -455,7 +447,7 @@
           <div class="card-header">Preset Tema (7 Pilihan)</div>
           <div class="theme-grid">
             <div class="theme-card @THEME_VIOLET@" onclick="setTheme('violet')">
-              <div class="theme-preview" style="background:#16102a;">
+              <div class="theme-preview" style="background:#121214;">
                 <div style="width:32%;background:#8b5cf6;"></div>
               </div>
               <span style="font-size:12.5px;font-weight:600;">Violet</span>
@@ -632,7 +624,7 @@
               <div class="setting-title">Daftar Filter (EasyList, uBlock, ABPindo)</div>
               <div class="setting-desc">@FILTER_STATUS@</div>
             </div>
-            <button class="btn" onclick="triggerAction('filter_update', {})">🔄 Perbarui Daftar Filter</button>
+            <button class="btn" onclick="triggerAction('filter_update', {})">Perbarui Daftar Filter</button>
           </div>
           <div class="setting-row">
             <div class="setting-info">
@@ -663,14 +655,14 @@
               <div class="setting-title">Bersihkan Riwayat Kunjungan</div>
               <div class="setting-desc">Hapus seluruh catatan di <code>history.json</code></div>
             </div>
-            <button class="btn btn-secondary" onclick="triggerAction('clear_history', {})">🗑️ Hapus Riwayat</button>
+            <button class="btn btn-secondary" onclick="triggerAction('clear_history', {})">Hapus Riwayat</button>
           </div>
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-title">Bersihkan HTTP Cache</div>
               <div class="setting-desc">Kosongkan cache memori dan disk WebEngine</div>
             </div>
-            <button class="btn btn-secondary" onclick="triggerAction('clear_cache', {})">🧹 Bersihkan Cache</button>
+            <button class="btn btn-secondary" onclick="triggerAction('clear_cache', {})">Bersihkan Cache</button>
           </div>
         </div>
       </div>

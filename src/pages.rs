@@ -39,10 +39,13 @@ pub fn sanitize_css_token<'a>(input: &'a str, fallback: &'a str) -> &'a str {
     }
 }
 
-/// Menghasilkan HTML halaman Start / Tab Baru (Zen / Arc Style)
+/// Menghasilkan HTML halaman Start / Tab Baru
 pub fn generate_start_page_html(
     accent: &str,
     fg: &str,
+    bg: &str,
+    surface: &str,
+    border: &str,
     is_google: bool,
     show_clock: bool,
     show_search: bool,
@@ -70,11 +73,17 @@ pub fn generate_start_page_html(
     };
     let engine_label = if is_google { "Google" } else { "DuckDuckGo" };
     let accent_color = sanitize_css_token(accent, "#8b5cf6");
-    let fg_color = sanitize_css_token(fg, "#ddd6fe");
+    let fg_color = sanitize_css_token(fg, "#e8e8ea");
+    let bg_color = sanitize_css_token(bg, "#121214");
+    let surface_color = sanitize_css_token(surface, "#1c1c1f");
+    let border_color = sanitize_css_token(border, "#2e2e33");
 
     START_PAGE_TPL
         .replace("@FG@", fg_color)
         .replace("@ACCENT@", accent_color)
+        .replace("@BG@", bg_color)
+        .replace("@SURFACE@", surface_color)
+        .replace("@BORDER@", border_color)
         .replace("@CLOCK_DISP@", clock_disp)
         .replace("@SEARCH_DISP@", search_disp)
         .replace("@TILES_DISP@", tiles_disp)
@@ -178,11 +187,11 @@ pub fn generate_settings_page_html(
         ""
     };
 
-    let fg_color = sanitize_css_token(fg, "#ddd6fe");
+    let fg_color = sanitize_css_token(fg, "#e8e8ea");
     let accent_color = sanitize_css_token(accent, "#8b5cf6");
-    let bg_color = sanitize_css_token(bg, "#16102a");
-    let surface_color = sanitize_css_token(surface, "#1e1738");
-    let border_color = sanitize_css_token(border, "#3f2d6b");
+    let bg_color = sanitize_css_token(bg, "#121214");
+    let surface_color = sanitize_css_token(surface, "#1c1c1f");
+    let border_color = sanitize_css_token(border, "#2e2e33");
 
     let safe_homepage = escape_html(homepage);
     let safe_custom_qss = escape_html(custom_qss);
@@ -343,6 +352,9 @@ pub fn settings_extras_from_dir(config_dir: &Path) -> SettingsExtras {
 pub unsafe extern "C" fn rust_get_start_page(
     accent: *const c_char,
     fg: *const c_char,
+    bg: *const c_char,
+    surface: *const c_char,
+    border: *const c_char,
     is_google: bool,
     show_clock: bool,
     show_search: bool,
@@ -358,10 +370,28 @@ pub unsafe extern "C" fn rust_get_start_page(
     } else {
         unsafe { CStr::from_ptr(fg).to_str().unwrap_or("") }
     };
+    let bg_str = if bg.is_null() {
+        ""
+    } else {
+        unsafe { CStr::from_ptr(bg).to_str().unwrap_or("") }
+    };
+    let surface_str = if surface.is_null() {
+        ""
+    } else {
+        unsafe { CStr::from_ptr(surface).to_str().unwrap_or("") }
+    };
+    let border_str = if border.is_null() {
+        ""
+    } else {
+        unsafe { CStr::from_ptr(border).to_str().unwrap_or("") }
+    };
 
     let html = generate_start_page_html(
         accent_str,
         fg_str,
+        bg_str,
+        surface_str,
+        border_str,
         is_google,
         show_clock,
         show_search,
@@ -400,19 +430,19 @@ pub unsafe extern "C" fn rust_get_settings_page(
         unsafe { CStr::from_ptr(theme).to_str().unwrap_or("violet") }
     };
     let bg_str = if bg.is_null() {
-        "#16102a"
+        "#121214"
     } else {
-        unsafe { CStr::from_ptr(bg).to_str().unwrap_or("#16102a") }
+        unsafe { CStr::from_ptr(bg).to_str().unwrap_or("#121214") }
     };
     let surface_str = if surface.is_null() {
-        "#1e1738"
+        "#1c1c1f"
     } else {
-        unsafe { CStr::from_ptr(surface).to_str().unwrap_or("#1e1738") }
+        unsafe { CStr::from_ptr(surface).to_str().unwrap_or("#1c1c1f") }
     };
     let fg_str = if fg.is_null() {
-        "#ddd6fe"
+        "#e8e8ea"
     } else {
-        unsafe { CStr::from_ptr(fg).to_str().unwrap_or("#ddd6fe") }
+        unsafe { CStr::from_ptr(fg).to_str().unwrap_or("#e8e8ea") }
     };
     let accent_str = if accent.is_null() {
         "#8b5cf6"
@@ -420,9 +450,9 @@ pub unsafe extern "C" fn rust_get_settings_page(
         unsafe { CStr::from_ptr(accent).to_str().unwrap_or("#8b5cf6") }
     };
     let border_str = if border.is_null() {
-        "#3f2d6b"
+        "#2e2e33"
     } else {
-        unsafe { CStr::from_ptr(border).to_str().unwrap_or("#3f2d6b") }
+        unsafe { CStr::from_ptr(border).to_str().unwrap_or("#2e2e33") }
     };
     let density_str = if density.is_null() {
         "comfortable"

@@ -145,8 +145,8 @@ impl BrowserApp {
     }
 
     pub fn set_colors(&self, bg: &str, fg: &str, accent: &str) {
-        let c_bg = CString::new(bg).unwrap_or_else(|_| CString::new("#16102a").unwrap());
-        let c_fg = CString::new(fg).unwrap_or_else(|_| CString::new("#ddd6fe").unwrap());
+        let c_bg = CString::new(bg).unwrap_or_else(|_| CString::new("#121214").unwrap());
+        let c_fg = CString::new(fg).unwrap_or_else(|_| CString::new("#e8e8ea").unwrap());
         let c_accent = CString::new(accent).unwrap_or_else(|_| CString::new("#8b5cf6").unwrap());
         unsafe {
             browser_set_colors(self.handle, c_bg.as_ptr(), c_fg.as_ptr(), c_accent.as_ptr());

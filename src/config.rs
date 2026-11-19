@@ -45,22 +45,22 @@ fn default_window_height() -> i32 {
     800
 }
 fn default_bg_color() -> String {
-    "#16102a".to_string()
+    "#121214".to_string()
 }
 fn default_fg_color() -> String {
-    "#ddd6fe".to_string()
+    "#e8e8ea".to_string()
 }
 fn default_accent_color() -> String {
     "#8b5cf6".to_string()
 }
 fn default_surface_color() -> String {
-    "#1e1738".to_string()
+    "#1c1c1f".to_string()
 }
 fn default_border_color() -> String {
-    "#3f2d6b".to_string()
+    "#2e2e33".to_string()
 }
 fn default_bg_opacity() -> f32 {
-    0.88
+    1.0
 }
 fn default_ui_density() -> String {
     "comfortable".to_string()

@@ -18,6 +18,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Simplified the default Violet theme and both built-in pages so the UI
+  looks plain instead of generated: the Violet preset is now a neutral
+  dark palette (`#121214` background, `#1c1c1f` surface, `#e8e8ea` text)
+  with the violet accent (`#8b5cf6`) used sparingly and a solid,
+  non-transparent background. The start page lost the ambient glow,
+  the oversized clock and greeting, the bang hints, and the emoji footer
+  links; tiles and the search box are flat with no lift, blur, or shadow.
+  The start page now also follows the theme's background, surface, and
+  border colors instead of hardcoded dark values. The settings page lost
+  its emoji labels, lift-on-hover effects, and marketing footer copy.
+  Other presets are unchanged.
 - The Rust engine and the C++ bridge now share a single configuration
   directory on every platform: the Rust side passes its resolved
   config directory to the bridge at startup instead of the bridge

@@ -157,7 +157,9 @@ fn test_pages_and_theme_generation() {
         "&lt;script&gt;&quot;x&quot;&lt;/script&gt;"
     );
 
-    let start_html = generate_start_page_html("#89b4fa", "#cdd6f4", true, true, true, true);
+    let start_html = generate_start_page_html(
+        "#89b4fa", "#cdd6f4", "#11111b", "#181825", "#313244", true, true, true, true,
+    );
     assert!(start_html.contains("https://www.google.com/search"));
 
     let settings_html = generate_settings_page_html(
