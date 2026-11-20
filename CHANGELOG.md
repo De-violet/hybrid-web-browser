@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- The window now starts maximized on first run and remembers its
+  maximized state, so it always fits the screen it is on (`window_maximized`
+  in config.json, saved together with the restored window size). A saved
+  window is also clamped to the screen, so a 1280x800 window no longer
+  overflows a 1366x768 display.
+
 - Rolling `continuous` prerelease: every push to `main` now publishes a
   development build with the latest Linux and Windows assets, so a fresh
   release is always available without waiting for a version tag. Tagged
@@ -28,6 +34,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   The start page now also follows the theme's background, surface, and
   border colors instead of hardcoded dark values. The settings page lost
   its emoji labels, lift-on-hover effects, and marketing footer copy.
+- On Windows the native title bar (main window and dialogs) now follows
+  the theme: dark with a dark theme, light with a light theme, instead
+  of always staying white on a dark UI.
+- Lower RAM use: each renderer’s V8 heap is capped at 512 MB, the Cast
+  (MediaRouter) and Translate components are disabled, and cached page
+  resources are discarded aggressively on low-memory systems.
+- Smart Memory no longer suspends a tab that is playing audio, including
+  when suspended manually from the tab menu, so a background music tab
+  keeps playing. Suspended tabs are now marked `[Suspended]` instead of
+  with an emoji, matching the plain UI direction.
 - Translated the whole browser UI to English (start page, settings page,
   menus, dialogs, toasts, and the filter-list status) and removed the
   start-page footer links, so the start page shows only the clock, the

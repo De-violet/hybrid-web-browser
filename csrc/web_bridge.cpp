@@ -24,6 +24,7 @@
 #include <QDir>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QScreen>
 #include <QLabel>
 #include <QProgressBar>
 #include <QMenu>
@@ -54,6 +55,18 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <vector>
+
+#ifdef Q_OS_WIN
+// Windows-only: dark title bars via DWM. NOMINMAX keeps windows.h from
+// defining min/max macros that would break <algorithm>.
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <dwmapi.h>
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#endif
 
 extern "C" {
     char* rust_get_start_page(const char* accent, const char* fg, const char* bg, const char* surface, const char* border, bool is_google, bool show_clock, bool show_search, bool show_tiles);
@@ -246,6 +259,9 @@ struct BrowserContext {
     int httpCacheSizeMb = 20;
     bool restoreSession = true;
     bool filterAutoUpdate = true;
+    // Start maximized on first run; the real state is saved on exit and
+    // restored from config.json, so the window always fits the screen.
+    bool windowMaximized = true;
 };
 
 static int create_tab_internal(BrowserContext *ctx, const char* raw_url, bool is_private);
@@ -342,6 +358,27 @@ static QString sanitize_qss_color(const QString &value, const QString &fallback)
     return fallback;
 }
 
+#ifdef Q_OS_WIN
+// True when a #rrggbb color is dark (relative luminance below 0.5).
+static bool is_dark_hex_color(const QString &hex) {
+    QColor c(hex);
+    if (!c.isValid()) return true;
+    double lum = (0.2126 * c.red() + 0.7152 * c.green() + 0.0722 * c.blue()) / 255.0;
+    return lum < 0.5;
+}
+
+// Ask Windows to draw a dark (or light) title bar for this window.
+// DWMWA_USE_IMMERSIVE_DARK_MODE needs Windows 10 1809+; on older builds
+// the call fails silently and the system title bar stays as-is.
+static void apply_dark_title_bar(QWidget *widget, bool dark) {
+    if (!widget) return;
+    HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+    if (!hwnd) return;
+    BOOL value = dark ? TRUE : FALSE;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+}
+#endif
+
 static void apply_theme_qss(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
 
@@ -366,6 +403,12 @@ static void apply_theme_qss(BrowserContext *ctx) {
         rust_free_c_str(rawQss);
         ctx->window->setStyleSheet(qss);
     }
+
+#ifdef Q_OS_WIN
+    // Keep the native title bar in step with the theme, so a dark theme
+    // does not end up with a white title bar (and vice versa).
+    apply_dark_title_bar(ctx->window, is_dark_hex_color(ctx->bgColor));
+#endif
 
     update_tab_bar_placement(ctx);
 }
@@ -603,7 +646,7 @@ static void run_smart_memory_cleanup(BrowserContext *ctx) {
                 meta.isSuspended = true;
 
                 meta.view->load(QUrl("about:blank"));
-                ctx->tabBar->setTabText(static_cast<int>(i), "💤 " + meta.savedTitle);
+                ctx->tabBar->setTabText(static_cast<int>(i), "[Suspended] " + meta.savedTitle);
                 suspendedCount++;
             }
         }
@@ -863,6 +906,9 @@ static void show_bookmarks_dialog(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
     QDialog dlg(ctx->window);
     dlg.setWindowTitle("Bookmarks");
+#ifdef Q_OS_WIN
+    apply_dark_title_bar(&dlg, is_dark_hex_color(ctx->bgColor));
+#endif
     dlg.resize(520, 380);
     dlg.setStyleSheet(generate_dialog_stylesheet(ctx->bgColor, ctx->fgColor, ctx->accentColor));
 
@@ -960,6 +1006,9 @@ static void show_history_dialog(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
     QDialog dlg(ctx->window);
     dlg.setWindowTitle("Browsing History");
+#ifdef Q_OS_WIN
+    apply_dark_title_bar(&dlg, is_dark_hex_color(ctx->bgColor));
+#endif
     dlg.resize(560, 420);
     dlg.setStyleSheet(generate_dialog_stylesheet(ctx->bgColor, ctx->fgColor, ctx->accentColor));
 
@@ -1092,6 +1141,9 @@ static void show_downloads_dialog(BrowserContext *ctx) {
     if (!ctx || !ctx->window) return;
     QDialog dlg(ctx->window);
     dlg.setWindowTitle(" Download Manager");
+#ifdef Q_OS_WIN
+    apply_dark_title_bar(&dlg, is_dark_hex_color(ctx->bgColor));
+#endif
     dlg.resize(520, 340);
     dlg.setStyleSheet(generate_dialog_stylesheet(ctx->bgColor, ctx->fgColor, ctx->accentColor));
 
@@ -1175,8 +1227,13 @@ static void save_browser_config(BrowserContext *ctx, const QString &homepage = "
     root["restore_session"] = ctx->restoreSession;
     root["filter_auto_update"] = ctx->filterAutoUpdate;
     if (ctx->window) {
-        root["window_width"] = ctx->window->width();
-        root["window_height"] = ctx->window->height();
+        // Persist the maximized state, and the restored (non-maximized)
+        // size — saving the maximized geometry would pin the window to
+        // full-screen size even after the user un-maximizes it.
+        root["window_maximized"] = ctx->window->isMaximized();
+        QRect normal = ctx->window->normalGeometry();
+        root["window_width"] = normal.width();
+        root["window_height"] = normal.height();
     }
 
     QFile wf(configPath);
@@ -1644,6 +1701,13 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
         "--media-cache-size=20971520 "
         "--disable-speech-api "
         "--disable-breakpad "
+        // Cap the V8 heap per renderer (YouTube's JS heap normally stays
+        // well under this) and drop the Cast + Translate components, so a
+        // background music tab costs less RAM. --aggressive-cache-discard
+        // drops cached page resources early on low-memory systems.
+        "--js-flags=--max-old-space-size=512 "
+        "--disable-features=MediaRouter,Translate "
+        "--aggressive-cache-discard "
         "--enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL "
         "--enable-accelerated-video-decode";
     QByteArray existingFlags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS").trimmed();
@@ -1667,6 +1731,15 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     ctx->window = new QMainWindow();
     ctx->window->setWindowTitle(QString::fromUtf8(title ? title : "Attis"));
     ctx->window->resize(width > 0 ? width : 1280, height > 0 ? height : 800);
+    // Never open larger than the screen: a saved 1280x800 window overflows
+    // a 1366x768 display, and a small laptop screen must still fit.
+    if (QScreen *screen = QGuiApplication::primaryScreen()) {
+        QSize avail = screen->availableGeometry().size();
+        if (ctx->window->width() > avail.width() || ctx->window->height() > avail.height()) {
+            ctx->window->resize(qMin(ctx->window->width(), avail.width()),
+                                 qMin(ctx->window->height(), avail.height()));
+        }
+    }
 
     QString configPath = attis_config_dir();
     // One-time migration from the legacy directory (no-op on Linux and
@@ -1725,6 +1798,7 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
             if (o.contains("http_cache_size_mb")) ctx->httpCacheSizeMb = std::max(4, std::min(512, o["http_cache_size_mb"].toInt(20)));
             if (o.contains("restore_session")) ctx->restoreSession = o["restore_session"].toBool(true);
             if (o.contains("filter_auto_update")) ctx->filterAutoUpdate = o["filter_auto_update"].toBool(true);
+            if (o.contains("window_maximized")) ctx->windowMaximized = o["window_maximized"].toBool(true);
         }
         rf.close();
     }
@@ -1863,12 +1937,15 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
             QString u = ctx->tabs[tabIdx].savedUrl;
             create_tab_internal(ctx, u.toUtf8().constData(), ctx->tabs[tabIdx].isPrivate);
         } else if (chosen == actSuspend) {
-            if (tabIdx != ctx->tabBar->currentIndex() && !ctx->tabs[tabIdx].isSuspended && ctx->tabs[tabIdx].view) {
+            // Manual suspend honors the same rule as the automatic one:
+            // never cut off a tab that is playing audio.
+            if (tabIdx != ctx->tabBar->currentIndex() && !ctx->tabs[tabIdx].isSuspended && ctx->tabs[tabIdx].view
+                && !ctx->tabs[tabIdx].view->page()->recentlyAudible()) {
                 ctx->tabs[tabIdx].savedUrl = ctx->tabs[tabIdx].view->url().toString();
                 ctx->tabs[tabIdx].savedTitle = ctx->tabBar->tabText(tabIdx);
                 ctx->tabs[tabIdx].isSuspended = true;
                 ctx->tabs[tabIdx].view->load(QUrl("about:blank"));
-                ctx->tabBar->setTabText(tabIdx, "💤 " + ctx->tabs[tabIdx].savedTitle);
+                ctx->tabBar->setTabText(tabIdx, "[Suspended] " + ctx->tabs[tabIdx].savedTitle);
             }
         } else if (chosen == actCloseOthers) {
             for (int i = ctx->tabBar->count() - 1; i >= 0; --i) {
@@ -2287,7 +2364,13 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     apply_theme_qss(ctx);
     update_search_engine_button(ctx);
 
-    ctx->window->show();
+    // Start maximized when that is the saved state (the default on first
+    // run), so the window always fits the screen it is on.
+    if (ctx->windowMaximized) {
+        ctx->window->showMaximized();
+    } else {
+        ctx->window->show();
+    }
     return static_cast<BrowserHandle>(ctx);
 }
 

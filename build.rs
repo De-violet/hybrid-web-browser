@@ -46,6 +46,8 @@ fn main() {
             "Qt6WebEngineWidgets",
             "Qt6WebEngineCore",
             "Qt6Svg",
+            // DwmSetWindowAttribute for the dark title bar (Windows 10+).
+            "dwmapi",
         ];
         for lib in &libs {
             println!("cargo:rustc-link-lib={}", lib);

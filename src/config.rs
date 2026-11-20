@@ -178,6 +178,12 @@ pub struct BrowserConfig {
     #[serde(default = "default_window_height")]
     pub window_height: i32,
 
+    /// Start maximized (the default on first run). The C++ side reads and
+    /// writes this in config.json together with the window size, so the
+    /// window always fits the screen it is on.
+    #[serde(default = "default_true")]
+    pub window_maximized: bool,
+
     #[serde(default = "default_custom_rules")]
     pub custom_rules: Vec<String>,
 
@@ -285,6 +291,7 @@ impl Default for BrowserConfig {
             user_agent: default_user_agent(),
             window_width: default_window_width(),
             window_height: default_window_height(),
+            window_maximized: true,
             custom_rules: default_custom_rules(),
             filter_lists: default_filter_lists(),
             filter_auto_update: true,

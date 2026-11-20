@@ -1,7 +1,7 @@
 use attis::adblock_engine::{
     engine_cache_path, normalize_domain, parse_rule_lines, AdBlockManager,
 };
-use attis::config::ConfigManager;
+use attis::config::{BrowserConfig, ConfigManager};
 use attis::history::HistoryManager;
 use attis::pages::{escape_html, generate_settings_page_html, generate_start_page_html};
 use attis::tabs::TabManager;
@@ -134,6 +134,33 @@ fn test_config_manager_isolated() {
     assert!(!cfg.config.bg_color.is_empty());
 
     let _ = std::fs::remove_dir_all(&cfg_dir);
+}
+
+#[test]
+fn test_window_maximized_defaults_and_round_trips() {
+    // First run (no config file): the window starts maximized so it
+    // always fits the screen it is on.
+    assert!(BrowserConfig::default().window_maximized);
+
+    // An explicit false survives a JSON round-trip (the C++ side reads
+    // and writes this key in config.json).
+    let cfg = BrowserConfig {
+        window_maximized: false,
+        window_width: 1024,
+        window_height: 768,
+        ..BrowserConfig::default()
+    };
+    let json = serde_json::to_string(&cfg).unwrap();
+    let back: BrowserConfig = serde_json::from_str(&json).unwrap();
+    assert!(!back.window_maximized);
+    assert_eq!(back.window_width, 1024);
+    assert_eq!(back.window_height, 768);
+
+    // A config file written before this key existed still loads, with
+    // the maximized default.
+    let back: BrowserConfig = serde_json::from_str("{\"window_width\": 1280}").unwrap();
+    assert!(back.window_maximized);
+    assert_eq!(back.window_width, 1280);
 }
 
 #[test]
