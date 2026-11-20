@@ -36,7 +36,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   its emoji labels, lift-on-hover effects, and marketing footer copy.
 - On Windows the native title bar (main window and dialogs) now follows
   the theme: dark with a dark theme, light with a light theme, instead
-  of always staying white on a dark UI.
+  of always staying white on a dark UI. The title-bar theme is applied
+  after the window is shown, since setting it before the first show
+  does not stick.
 - Lower RAM use: each renderer’s V8 heap is capped at 512 MB, the Cast
   (MediaRouter) and Translate components are disabled, and cached page
   resources are discarded aggressively on low-memory systems.

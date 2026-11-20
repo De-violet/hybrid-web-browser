@@ -2371,6 +2371,12 @@ BrowserHandle browser_create(const char* title, int width, int height, const cha
     } else {
         ctx->window->show();
     }
+#ifdef Q_OS_WIN
+    // Set the title-bar theme AFTER the window is shown. Setting it
+    // earlier (in apply_theme_qss, before show) does not stick: the
+    // DWM attribute is lost when the window is first shown/maximized.
+    apply_dark_title_bar(ctx->window, is_dark_hex_color(ctx->bgColor));
+#endif
     return static_cast<BrowserHandle>(ctx);
 }
 
